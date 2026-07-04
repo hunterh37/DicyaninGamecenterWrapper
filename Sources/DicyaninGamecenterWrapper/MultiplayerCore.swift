@@ -21,6 +21,8 @@ public struct MultiplayerState: Equatable {
     public var remotePoses: [String: PlayerPose] = [:]
     public var remoteColors: [String: AvatarColor] = [:]
     public var pendingEmotes: [PendingEmote] = []
+    // Latest known state of every networked prop, keyed by prop id.
+    public var remoteProps: [Int: PropState] = [:]
 
     public init(localPlayerID: String) {
         self.localPlayerID = localPlayerID
@@ -56,6 +58,11 @@ public enum MultiplayerReducer {
         return [RelayMessage(message: .emote(emote), reliable: true)]
     }
 
+    public static func makeProps(_ props: [PropState], reliable: Bool = false, into state: inout MultiplayerState) -> RelayMessage {
+        for prop in props { state.remoteProps[prop.id] = prop }
+        return RelayMessage(message: .props(props), reliable: reliable)
+    }
+
     public static func broadcastColor(_ state: MultiplayerState) -> [RelayMessage] {
         [RelayMessage(message: .color(state.localColor), reliable: true)]
     }
@@ -87,6 +94,18 @@ public enum MultiplayerReducer {
         case .emote(let emote):
             state.pendingEmotes.append(PendingEmote(playerID: playerID, emote: emote))
             return []
+        case .props(let props):
+            for prop in props {
+                let current = state.remoteProps[prop.id]
+                if prop.holder == playerID {
+                    // A player may always claim and move a prop it says it holds.
+                    state.remoteProps[prop.id] = prop
+                } else if prop.holder == nil, current == nil || current?.holder == playerID {
+                    // Only the current holder can release.
+                    state.remoteProps[prop.id] = prop
+                }
+            }
+            return []
         case .roster(let roster):
             for (id, color) in roster where id != state.localPlayerID {
                 state.remoteColors[id] = color
@@ -108,6 +127,12 @@ public enum MultiplayerReducer {
             state.connectedPeers.remove(playerID)
             state.remotePoses.removeValue(forKey: playerID)
             state.remoteColors.removeValue(forKey: playerID)
+            // Drop anything the leaving player was carrying.
+            for (id, prop) in state.remoteProps where prop.holder == playerID {
+                var released = prop
+                released.holder = nil
+                state.remoteProps[id] = released
+            }
             return []
         }
     }

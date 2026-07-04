@@ -60,6 +60,7 @@ public final class GameCenterService: NSObject, ObservableObject {
     public var localColor: AvatarColor { state.localColor }
     public var remotePoses: [String: PlayerPose] { state.remotePoses }
     public var remoteColors: [String: AvatarColor] { state.remoteColors }
+    public var remoteProps: [Int: PropState] { state.remoteProps }
     public var pendingEmotes: [(playerID: String, emote: EmoteKind)] {
         get { state.pendingEmotes.map { ($0.playerID, $0.emote) } }
         set { state.pendingEmotes = newValue.map { PendingEmote(playerID: $0.playerID, emote: $0.emote) } }
@@ -413,6 +414,11 @@ public final class GameCenterService: NSObject, ObservableObject {
 
     public func setColor(_ color: AvatarColor) {
         send(MultiplayerReducer.setColor(color, into: &state))
+    }
+
+    public func sendProps(_ props: [PropState], reliable: Bool = false) {
+        guard !props.isEmpty else { return }
+        send([MultiplayerReducer.makeProps(props, reliable: reliable, into: &state)])
     }
 
     public func sendEmote(_ emote: EmoteKind) {

@@ -64,15 +64,39 @@ public struct PlayerPose: Codable, Equatable {
     public var rightHand: CodableTransform?
 }
 
+extension CodableTransform {
+    public init(position: SIMD3<Float>, rotation: simd_quatf) {
+        px = position.x; py = position.y; pz = position.z
+        qx = rotation.imag.x; qy = rotation.imag.y; qz = rotation.imag.z; qw = rotation.real
+    }
+}
+
+// One networked grabbable object. holder is the player currently carrying
+// it, nil when it sits free in the world. Same wire style as PlayerPose:
+// unreliable transforms at tick rate while held, reliable release.
+public struct PropState: Codable, Equatable {
+    public init(id: Int, holder: String?, transform: CodableTransform) {
+        self.id = id
+        self.holder = holder
+        self.transform = transform
+    }
+    public var id: Int
+    public var holder: String?
+    public var transform: CodableTransform
+}
+
 public struct AvatarColor: Codable, Equatable {
-    public init(r: Float, g: Float, b: Float) {
+    public init(r: Float, g: Float, b: Float, face: Int? = nil) {
         self.r = r
         self.g = g
         self.b = b
+        self.face = face
     }
     public var r: Float
     public var g: Float
     public var b: Float
+    // Face style raw value. Optional so old clients decode without it.
+    public var face: Int?
 
     public static let `default` = AvatarColor(r: 0.55, g: 0.75, b: 0.95)
 }
@@ -83,6 +107,9 @@ public enum NetMessage: Codable, Equatable {
     // Sent reliably.
     case color(AvatarColor)
     case emote(EmoteKind)
+    // Grabbable prop transforms. Unreliable at ~15 Hz while held; a release
+    // (holder nil) is sent reliably so props never stick to a hand.
+    case props([PropState])
     // Host relay: full roster of known colors, sent when players connect.
     case roster([String: AvatarColor])
     // Host only. Instructs the named player to leave the match.
