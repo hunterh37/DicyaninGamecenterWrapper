@@ -41,7 +41,10 @@ public struct LobbyListing: Identifiable {
 @MainActor
 public final class GameCenterService: NSObject, ObservableObject {
 
-    public static let shared = GameCenterService()
+    /// The active instance. Apps that inject a container id should construct
+    /// `GameCenterService(containerID:)` once at launch and assign it here so
+    /// singletons like `LobbyPushDelegate` route to the same instance.
+    public static var shared = GameCenterService()
 
     @Published public var isAuthenticated = false
     @Published public var authError: String?
@@ -67,7 +70,7 @@ public final class GameCenterService: NSObject, ObservableObject {
     }
 
     private var invites: [String: GKInvite] = [:]
-    private let lobbyService = LobbyService()
+    private let lobbyService: LobbyService
     private var hostedLobbyGroup: Int?
     private var cancellables: Set<AnyCancellable> = []
     private lazy var mockDriver = MockMultiplayerDriver(owner: self)
@@ -76,7 +79,8 @@ public final class GameCenterService: NSObject, ObservableObject {
     // True whenever the immersive arena should be open: real match or mock.
     public var inSession: Bool { match != nil || isMockSession }
 
-    public override init() {
+    public init(containerID: String = "iCloud.com.dicyanin.avatararena") {
+        self.lobbyService = LobbyService(containerID: containerID)
         super.init()
         lobbyService.$lobbies
             .receive(on: RunLoop.main)
@@ -208,9 +212,16 @@ public final class GameCenterService: NSObject, ObservableObject {
                     source: .global(lobby)
                 )
             }
-        // Global quick-match queue is always joinable.
-        list.append(LobbyListing(id: "global-quick-match", hostName: "Global Arena", subtitle: "Quick match", source: .quickMatch))
         lobbies = list
+    }
+
+    // MARK: - Quick play
+
+    // Global quick-match queue, always joinable. Surfaced as its own primary
+    // action in the UI instead of a row in the lobby list.
+    public func quickPlay(maxPlayers: Int = 4) {
+        log.info("Join", "Quick play into global group 1")
+        startMatchmaking(request: standardRequest(maxPlayers: maxPlayers, playerGroup: 1))
     }
 
     // MARK: - Create / join

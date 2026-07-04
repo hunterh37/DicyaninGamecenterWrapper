@@ -18,7 +18,6 @@ public struct GlobalLobby: Identifiable, Equatable {
 @MainActor
 public final class LobbyService: ObservableObject {
 
-    public static var containerID = "iCloud.com.dicyanin.avatararena"
     public static let recordType = "Lobby"
     public static let subscriptionID = "open-lobbies-sub"
 
@@ -29,13 +28,15 @@ public final class LobbyService: ObservableObject {
     public static let staleInterval: TimeInterval = 180
     private static let heartbeatInterval: TimeInterval = 60
 
-    private var publicDB: CKDatabase { CKContainer(identifier: LobbyService.containerID).publicCloudDatabase }
+    // The app's own CloudKit container, supplied by the host app. Must match an
+    // entry in the app's iCloud container entitlements.
+    private let containerID: String
+    private var publicDB: CKDatabase { CKContainer(identifier: containerID).publicCloudDatabase }
 
-    /// Point the shared lobby directory at this app's own CloudKit container.
-    /// Call once at launch before any LobbyService is created.
-    public static func configure(containerID: String) {
-        LobbyService.containerID = containerID
+    public init(containerID: String) {
+        self.containerID = containerID
     }
+
     private var hostedRecordID: CKRecord.ID?
     private var didSubscribe = false
     private var heartbeatTimer: Timer?
