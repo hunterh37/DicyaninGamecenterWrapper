@@ -158,3 +158,111 @@ final class MultiplayerTests: XCTestCase {
         return PlayerPose(head: CodableTransform(m), leftHand: nil, rightHand: nil)
     }
 }
+
+// MARK: - Stage 7: props
+
+extension MultiplayerTests {
+
+    private static func prop(_ id: Int, holder: String?, x: Float = 0) -> PropState {
+        var m = matrix_identity_float4x4
+        m.columns.3 = [x, 0, 0, 1]
+        return PropState(id: id, holder: holder, transform: CodableTransform(m))
+    }
+
+    func testWireRoundTripForPropsAndKick() throws {
+        let messages: [NetMessage] = [
+            .props([Self.prop(1, holder: "p1", x: 3), Self.prop(2, holder: nil)]),
+            .kick("p2")
+        ]
+        for message in messages {
+            let data = try XCTUnwrap(message.encoded(), "encode failed for \(message)")
+            let decoded = try XCTUnwrap(NetMessage.decode(data), "decode failed for \(message)")
+            XCTAssertEqual(decoded, message)
+        }
+    }
+
+    func testHolderCanClaimAndMoveProp() {
+        var s = MultiplayerState(localPlayerID: "p1")
+        _ = MultiplayerReducer.apply(.props([Self.prop(1, holder: "p2", x: 1)]), from: "p2", into: &s)
+        XCTAssertEqual(s.remoteProps[1]?.holder, "p2")
+        _ = MultiplayerReducer.apply(.props([Self.prop(1, holder: "p2", x: 5)]), from: "p2", into: &s)
+        XCTAssertEqual(s.remoteProps[1]?.transform.position.x, 5)
+    }
+
+    func testOnlyCurrentHolderCanRelease() {
+        var s = MultiplayerState(localPlayerID: "p1")
+        _ = MultiplayerReducer.apply(.props([Self.prop(1, holder: "p2")]), from: "p2", into: &s)
+        // p3 tries to release a prop held by p2: ignored.
+        _ = MultiplayerReducer.apply(.props([Self.prop(1, holder: nil, x: 9)]), from: "p3", into: &s)
+        XCTAssertEqual(s.remoteProps[1]?.holder, "p2")
+        // p2 releases its own prop: applied.
+        _ = MultiplayerReducer.apply(.props([Self.prop(1, holder: nil, x: 9)]), from: "p2", into: &s)
+        XCTAssertNil(s.remoteProps[1]?.holder)
+        XCTAssertEqual(s.remoteProps[1]?.transform.position.x, 9)
+    }
+
+    func testPlayerCannotClaimPropForSomeoneElse() {
+        var s = MultiplayerState(localPlayerID: "p1")
+        _ = MultiplayerReducer.apply(.props([Self.prop(1, holder: "p9")]), from: "p2", into: &s)
+        XCTAssertNil(s.remoteProps[1], "a sender may only claim props for itself")
+    }
+
+    func testFreePropCanBePlacedByAnyone() {
+        var s = MultiplayerState(localPlayerID: "p1")
+        _ = MultiplayerReducer.apply(.props([Self.prop(1, holder: nil, x: 2)]), from: "p2", into: &s)
+        XCTAssertEqual(s.remoteProps[1]?.transform.position.x, 2)
+    }
+
+    func testMakePropsUpdatesLocalStateAndChannel() {
+        var s = MultiplayerState(localPlayerID: "p1")
+        let held = MultiplayerReducer.makeProps([Self.prop(1, holder: "p1")], into: &s)
+        XCTAssertFalse(held.reliable)
+        XCTAssertEqual(s.remoteProps[1]?.holder, "p1")
+        let release = MultiplayerReducer.makeProps([Self.prop(1, holder: nil)], reliable: true, into: &s)
+        XCTAssertTrue(release.reliable)
+        XCTAssertNil(s.remoteProps[1]?.holder)
+    }
+
+    func testDisconnectReleasesHeldProps() {
+        var s = MultiplayerState(localPlayerID: "p1")
+        s.connectedPeers = ["p2"]
+        _ = MultiplayerReducer.apply(.props([Self.prop(1, holder: "p2")]), from: "p2", into: &s)
+        _ = MultiplayerReducer.peerChanged("p2", connected: false, into: &s)
+        XCTAssertNotNil(s.remoteProps[1])
+        XCTAssertNil(s.remoteProps[1]?.holder, "props held by a leaving player must drop")
+    }
+
+    // MARK: - Stage 8: message robustness
+
+    func testColorAndEmoteChannelsAreReliable() {
+        var s = MultiplayerState(localPlayerID: "p1")
+        for relay in MultiplayerReducer.setColor(.default, into: &s) { XCTAssertTrue(relay.reliable) }
+        for relay in MultiplayerReducer.sendEmote(.wave, into: &s) { XCTAssertTrue(relay.reliable) }
+        for relay in MultiplayerReducer.hostRoster(s) { XCTAssertTrue(relay.reliable) }
+    }
+
+    func testAvatarColorDecodesWithoutFaceField() throws {
+        let legacy = Data(#"{"r":0.1,"g":0.2,"b":0.3}"#.utf8)
+        let color = try JSONDecoder().decode(AvatarColor.self, from: legacy)
+        XCTAssertNil(color.face)
+        XCTAssertEqual(color.r, 0.1)
+    }
+
+    func testDecodeRejectsEmptyData() {
+        XCTAssertNil(NetMessage.decode(Data()))
+    }
+
+    func testKickIsANoOpInReducer() {
+        var s = MultiplayerState(localPlayerID: "p1")
+        let before = s
+        XCTAssertTrue(MultiplayerReducer.apply(.kick("p1"), from: "p2", into: &s).isEmpty)
+        XCTAssertEqual(s, before)
+    }
+
+    func testEveryEmoteKindHasLabelAndPose() {
+        for emote in EmoteKind.allCases {
+            XCTAssertFalse(emote.label.isEmpty)
+            XCTAssertFalse(emote.displayName.isEmpty)
+        }
+    }
+}

@@ -44,6 +44,15 @@ public final class LobbyService: ObservableObject {
     // MARK: - Read
 
     public func refresh() {
+        fetchOpenLobbies { [weak self] found in
+            self?.lobbies = found
+        }
+    }
+
+    // One-shot fetch of every live open lobby, delivered on the main actor.
+    // refresh() publishes through this; autoJoin uses it directly so it can
+    // decide on a fresh list instead of a possibly stale published one.
+    public func fetchOpenLobbies(_ completion: @escaping @MainActor ([GlobalLobby]) -> Void) {
         let cutoff = Date().addingTimeInterval(-Self.staleInterval)
         let predicate = NSPredicate(format: "isOpen == 1 AND modificationDate > %@", cutoff as NSDate)
         let query = CKQuery(recordType: Self.recordType, predicate: predicate)
@@ -57,12 +66,12 @@ public final class LobbyService: ObservableObject {
                 found.append(lobby)
             }
         }
-        op.queryResultBlock = { [weak self] result in
+        op.queryResultBlock = { result in
             Task { @MainActor in
                 if case .failure(let error) = result {
                     MultiplayerLog.shared.error("CloudKit", "Lobby query failed: \(error.localizedDescription)")
                 }
-                self?.lobbies = found
+                completion(found)
             }
         }
         publicDB.add(op)

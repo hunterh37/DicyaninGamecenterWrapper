@@ -89,6 +89,24 @@ public final class MockMultiplayerDriver {
         owner?.mockEmote(emote, for: player.id)
     }
 
+    // A mocked peer parrots back a friendly line shortly after the local
+    // player sends chat, so the offline session exercises the chat log.
+    private static let mockReplies = [
+        "Nice one", "Cheers", "Kanpai", "Ha, good call", "Pull up a seat",
+        "Same here", "This place rules", "Another round?"
+    ]
+
+    public func echoChat() {
+        guard let player = players.randomElement(),
+              let owner,
+              let reply = Self.mockReplies.randomElement() else { return }
+        let name = owner.playerNames[player.id] ?? "Player"
+        Task { @MainActor [weak owner] in
+            try? await Task.sleep(for: .milliseconds(700))
+            owner?.mockReceiveChat(ChatMessage(senderID: player.id, senderName: name, text: reply))
+        }
+    }
+
     private static func transform(position: SIMD3<Float>, yaw: Float) -> simd_float4x4 {
         var m = simd_float4x4(simd_quatf(angle: yaw, axis: [0, 1, 0]))
         m.columns.3 = SIMD4<Float>(position, 1)
