@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build/primary.swiftdeps"
+  },
+  "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.derived/runner.swift": {
+    "dependencies": "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build/runner.d",
+    "object": "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build/runner.swift.o",
+    "swiftmodule": "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build/runner~partial.swiftmodule",
+    "swift-dependencies": "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build/runner.swiftdeps",
+    "diagnostics": "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build/runner.dia"
+  }
+}

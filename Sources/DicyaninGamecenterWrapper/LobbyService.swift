@@ -13,6 +13,7 @@ public struct GlobalLobby: Identifiable, Equatable {
     public let hostID: String
     public let playerGroup: Int
     public let playerCount: Int
+    public let inProgress: Bool
 }
 
 @MainActor
@@ -111,6 +112,7 @@ public final class LobbyService: ObservableObject {
         record["playerCount"] = 1 as CKRecordValue
         record["maxPlayers"] = maxPlayers as CKRecordValue
         record["isOpen"] = 1 as CKRecordValue
+        record["inProgress"] = 0 as CKRecordValue
 
         publicDB.save(record) { [weak self] saved, error in
             Task { @MainActor in
@@ -159,6 +161,17 @@ public final class LobbyService: ObservableObject {
         }
     }
 
+    /// Marks the hosted lobby as in-progress (a match is being played) or open
+    /// again, so browsing clients can see the room state before joining.
+    public func setInProgress(_ inProgress: Bool) {
+        guard let id = hostedRecordID else { return }
+        publicDB.fetch(withRecordID: id) { [weak self] record, _ in
+            guard let record else { return }
+            record["inProgress"] = (inProgress ? 1 : 0) as CKRecordValue
+            self?.publicDB.save(record) { _, _ in }
+        }
+    }
+
     public func closeHostedLobby() {
         heartbeatTimer?.invalidate()
         heartbeatTimer = nil
@@ -176,6 +189,7 @@ public final class LobbyService: ObservableObject {
             let group = record["playerGroup"] as? Int
         else { return nil }
         let count = record["playerCount"] as? Int ?? 1
-        return GlobalLobby(id: record.recordID.recordName, name: name, hostID: hostID, playerGroup: group, playerCount: count)
+        let inProgress = (record["inProgress"] as? Int ?? 0) == 1
+        return GlobalLobby(id: record.recordID.recordName, name: name, hostID: hostID, playerGroup: group, playerCount: count, inProgress: inProgress)
     }
 }

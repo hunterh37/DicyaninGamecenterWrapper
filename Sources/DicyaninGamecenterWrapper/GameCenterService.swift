@@ -28,12 +28,14 @@ public struct LobbyListing: Identifiable {
     public let id: String
     public let hostName: String
     public let subtitle: String?
+    public let inProgress: Bool
     public let source: Source
 
-    public init(id: String, hostName: String, subtitle: String? = nil, source: Source) {
+    public init(id: String, hostName: String, subtitle: String? = nil, inProgress: Bool = false, source: Source) {
         self.id = id
         self.hostName = hostName
         self.subtitle = subtitle
+        self.inProgress = inProgress
         self.source = source
     }
 }
@@ -118,6 +120,13 @@ public final class GameCenterService: NSObject, ObservableObject {
     private var invites: [String: GKInvite] = [:]
     private let lobbyService: LobbyService
     private var hostedLobbyGroup: Int?
+    // Game Center playerGroup of the session the local player is currently in
+    // or matchmaking into. Shared in invite deeplinks so friends can join the
+    // exact same lobby, and consumed by `joinLobby(group:)` on the far side.
+    @Published public private(set) var currentLobbyGroup: Int?
+    // A deeplink join requested before Game Center finished authenticating,
+    // applied automatically the moment auth completes.
+    private var pendingDeepLinkGroup: Int?
     private var ghostTimer: Timer?
     private var quickPlayTimer: Timer?
     // Bumped on every new find/cancel so completions from a superseded
@@ -178,10 +187,14 @@ public final class GameCenterService: NSObject, ObservableObject {
 
     // Everyone in the current session, local first, for the player list.
     public var sessionPlayers: [SessionPlayer] {
+        // Ghosts (players who left/dropped) keep their last pose and color so
+        // their flight avatar can freeze in place, but they are no longer in the
+        // session and must not appear in the "In Formation" roster.
         let ids = state.connectedPeers
             .union([localPlayerID])
             .union(state.remoteColors.keys)
             .union(state.remotePoses.keys)
+            .subtracting(state.ghostPeers.keys)
         let host = hostPlayerID
         return ids.map { id in
             let isLocal = id == localPlayerID
@@ -261,6 +274,10 @@ public final class GameCenterService: NSObject, ObservableObject {
                     self.lobbyService.subscribe()
                     self.lobbyService.refresh()
                     self.refreshLobbies()
+                    if let group = self.pendingDeepLinkGroup {
+                        self.pendingDeepLinkGroup = nil
+                        self.joinLobby(group: group)
+                    }
                 }
             }
         }
@@ -284,7 +301,8 @@ public final class GameCenterService: NSObject, ObservableObject {
                 LobbyListing(
                     id: lobby.id,
                     hostName: lobby.name,
-                    subtitle: "\(lobby.playerCount) in room",
+                    subtitle: lobby.inProgress ? "Match in progress" : "\(lobby.playerCount) in room",
+                    inProgress: lobby.inProgress,
                     source: .global(lobby)
                 )
             }
@@ -369,7 +387,17 @@ public final class GameCenterService: NSObject, ObservableObject {
         startMatchmaking(request: standardRequest(maxPlayers: maxPlayers, playerGroup: group))
     }
 
+    /// Host only: flags the published lobby record as in-progress or open so
+    /// browsing clients can see the room state before joining.
+    public func setHostedLobbyInProgress(_ inProgress: Bool) {
+        lobbyService.setInProgress(inProgress)
+    }
+
     public func join(_ lobby: LobbyListing) {
+        guard !lobby.inProgress else {
+            log.info("Join", "Blocked join: lobby \(lobby.hostName) is in progress")
+            return
+        }
         isAutoMatchmaking = false
         switch lobby.source {
         case .invite(let invite):
@@ -388,6 +416,30 @@ public final class GameCenterService: NSObject, ObservableObject {
             log.info("Join", "Joining global lobby \(global.name) group=\(global.playerGroup)")
             startMatchmaking(request: standardRequest(maxPlayers: Self.lobbyCapacity, playerGroup: global.playerGroup))
         }
+    }
+
+    /// Joins the lobby identified by a Game Center `playerGroup`, the value
+    /// carried in an invite deeplink. Matchmaking drops the player into the
+    /// same real-time match everyone else who shares that link lands in.
+    public func joinLobby(group: Int) {
+        guard group > 0 else {
+            log.warn("Join", "Ignoring deeplink join with invalid group \(group)")
+            return
+        }
+        // Cold launch from a link often lands before Game Center finishes
+        // authenticating; stash the group and apply it once auth completes.
+        guard isAuthenticated else {
+            log.info("Join", "Deeplink join deferred until authenticated (group=\(group))")
+            pendingDeepLinkGroup = group
+            return
+        }
+        guard match == nil, !isMatchmaking else {
+            log.info("Join", "Deeplink join ignored: already in a session (group=\(group))")
+            return
+        }
+        log.info("Join", "Deeplink joining lobby group=\(group)")
+        isAutoMatchmaking = false
+        startMatchmaking(request: standardRequest(maxPlayers: Self.lobbyCapacity, playerGroup: group))
     }
 
     private func standardRequest(maxPlayers: Int, playerGroup: Int) -> GKMatchRequest {
@@ -415,6 +467,7 @@ public final class GameCenterService: NSObject, ObservableObject {
         }
         matchmakingGeneration += 1
         let generation = matchmakingGeneration
+        currentLobbyGroup = request.playerGroup
         log.info("Matchmaking", "findMatch min=\(request.minPlayers) max=\(request.maxPlayers) group=\(request.playerGroup)")
         isMatchmaking = true
         GKMatchmaker.shared().findMatch(for: request) { [weak self] match, error in
@@ -439,6 +492,7 @@ public final class GameCenterService: NSObject, ObservableObject {
         isAutoMatchmaking = false
         isSoloSession = false
         hostedLobbyGroup = nil
+        currentLobbyGroup = nil
         lobbyService.closeHostedLobby()
     }
 
@@ -558,6 +612,7 @@ public final class GameCenterService: NSObject, ObservableObject {
         state.localColor = keepColor
         playerNames.removeAll()
         hostedLobbyGroup = nil
+        currentLobbyGroup = nil
         lobbyService.closeHostedLobby()
         // Back on the home view the player immediately sees a fresh list of
         // tables to hop into next.

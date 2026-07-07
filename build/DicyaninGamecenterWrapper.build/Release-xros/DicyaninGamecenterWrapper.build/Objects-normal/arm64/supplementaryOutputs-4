@@ -1,0 +1,12 @@
+{
+  "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/DebugConsoleView.swift" : {
+    "abi-baseline-json" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/build/DicyaninGamecenterWrapper.build/Release-xros/DicyaninGamecenterWrapper.build/Objects-normal/arm64/DicyaninGamecenterWrapper.abi.json",
+    "const-values" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/build/DicyaninGamecenterWrapper.build/Release-xros/DicyaninGamecenterWrapper.build/Objects-normal/arm64/DicyaninGamecenterWrapper-primary.swiftconstvalues",
+    "dependencies" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/build/DicyaninGamecenterWrapper.build/Release-xros/DicyaninGamecenterWrapper.build/Objects-normal/arm64/DicyaninGamecenterWrapper-primary.d",
+    "diagnostics" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/build/DicyaninGamecenterWrapper.build/Release-xros/DicyaninGamecenterWrapper.build/Objects-normal/arm64/DicyaninGamecenterWrapper-primary.dia",
+    "objc-header" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/build/DicyaninGamecenterWrapper.build/Release-xros/DicyaninGamecenterWrapper.build/Objects-normal/arm64/DicyaninGamecenterWrapper-Swift.h",
+    "swiftdoc" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/build/DicyaninGamecenterWrapper.build/Release-xros/DicyaninGamecenterWrapper.build/Objects-normal/arm64/DicyaninGamecenterWrapper.swiftdoc",
+    "swiftmodule" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/build/DicyaninGamecenterWrapper.build/Release-xros/DicyaninGamecenterWrapper.build/Objects-normal/arm64/DicyaninGamecenterWrapper.swiftmodule",
+    "swiftsourceinfo" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/build/DicyaninGamecenterWrapper.build/Release-xros/DicyaninGamecenterWrapper.build/Objects-normal/arm64/DicyaninGamecenterWrapper.swiftsourceinfo"
+  }
+}

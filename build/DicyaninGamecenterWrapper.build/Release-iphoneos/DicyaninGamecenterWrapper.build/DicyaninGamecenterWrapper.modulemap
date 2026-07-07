@@ -1,0 +1,4 @@
+module DicyaninGamecenterWrapper {
+header "DicyaninGamecenterWrapper-Swift.h"
+export *
+}

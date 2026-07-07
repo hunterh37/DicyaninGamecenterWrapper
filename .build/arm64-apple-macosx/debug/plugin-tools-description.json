@@ -1,0 +1,773 @@
+{
+  "builtTestProducts" : [
+    {
+      "binaryPath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.xctest/Contents/MacOS/DicyaninGamecenterWrapperPackageTests",
+      "packagePath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper",
+      "productName" : "DicyaninGamecenterWrapperPackageTests"
+    }
+  ],
+  "copyCommands" : {
+
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.DicyaninGamecenterWrapper-arm64-apple-macosx-debug.module" : {
+      "executable" : "/Applications/Xcode 2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/sources",
+      "importPath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/DebugConsoleView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/GameCenterService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/LobbyPushDelegate.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/LobbyService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/MockMultiplayer.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/MultiplayerCore.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/MultiplayerLog.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/NetMessage.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/PlayerListView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/swift-version-BF9FFD6CEA9A4E.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "DicyaninGamecenterWrapper",
+      "moduleOutputPath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/Modules/DicyaninGamecenterWrapper.swiftmodule",
+      "objects" : [
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/DebugConsoleView.swift.o",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/GameCenterService.swift.o",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/LobbyPushDelegate.swift.o",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/LobbyService.swift.o",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/MockMultiplayer.swift.o",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/MultiplayerCore.swift.o",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/MultiplayerLog.swift.o",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/NetMessage.swift.o",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/PlayerListView.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx10.13",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j12",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/include/DicyaninGamecenterWrapper-Swift.h",
+        "-swift-version",
+        "5",
+        "-plugin-path",
+        "/Applications/Xcode 2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.4.sdk",
+        "-F",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-I",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.4.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "dicyaningamecenterwrapper"
+      ],
+      "outputFileMapPath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/DebugConsoleView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/GameCenterService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/LobbyPushDelegate.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/LobbyService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/MockMultiplayer.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/MultiplayerCore.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/MultiplayerLog.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/NetMessage.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/PlayerListView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/Modules/DicyaninGamecenterWrapper.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/DebugConsoleView.swift",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/GameCenterService.swift",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/LobbyPushDelegate.swift",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/LobbyService.swift",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/MockMultiplayer.swift",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/MultiplayerCore.swift",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/MultiplayerLog.swift",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/NetMessage.swift",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/PlayerListView.swift"
+      ],
+      "tempsPath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build",
+      "wholeModuleOptimization" : false
+    },
+    "C.DicyaninGamecenterWrapperPackageTests-arm64-apple-macosx-debug.module" : {
+      "executable" : "/Applications/Xcode 2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build/sources",
+      "importPath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.derived/runner.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/swift-version-BF9FFD6CEA9A4E.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/Modules/DicyaninGamecenterWrapperTests.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "DicyaninGamecenterWrapperPackageTests",
+      "moduleOutputPath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/Modules/DicyaninGamecenterWrapperPackageTests.swiftmodule",
+      "objects" : [
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build/runner.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx10.13",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-Xfrontend",
+        "-enable-cross-import-overlays",
+        "-j12",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build/include/DicyaninGamecenterWrapperPackageTests-Swift.h",
+        "-plugin-path",
+        "/Applications/Xcode 2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.4.sdk",
+        "-F",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-I",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.4.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "dicyaningamecenterwrapper"
+      ],
+      "outputFileMapPath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build/runner.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/Modules/DicyaninGamecenterWrapperPackageTests.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.derived/runner.swift"
+      ],
+      "tempsPath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build",
+      "wholeModuleOptimization" : false
+    },
+    "C.DicyaninGamecenterWrapperTests-arm64-apple-macosx-debug.module" : {
+      "executable" : "/Applications/Xcode 2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperTests.build/sources",
+      "importPath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Tests/DicyaninGamecenterWrapperTests/LoopbackNetwork.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Tests/DicyaninGamecenterWrapperTests/MultiplayerTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/swift-version-BF9FFD6CEA9A4E.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/Modules/DicyaninGamecenterWrapper.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperTests.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "DicyaninGamecenterWrapperTests",
+      "moduleOutputPath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/Modules/DicyaninGamecenterWrapperTests.swiftmodule",
+      "objects" : [
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperTests.build/LoopbackNetwork.swift.o",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperTests.build/MultiplayerTests.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx14.0",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-Xfrontend",
+        "-enable-cross-import-overlays",
+        "-j12",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-swift-version",
+        "5",
+        "-plugin-path",
+        "/Applications/Xcode 2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.4.sdk",
+        "-F",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-I",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.4.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "dicyaningamecenterwrapper"
+      ],
+      "outputFileMapPath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperTests.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperTests.build/LoopbackNetwork.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperTests.build/MultiplayerTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/Modules/DicyaninGamecenterWrapperTests.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Tests/DicyaninGamecenterWrapperTests/LoopbackNetwork.swift",
+        "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Tests/DicyaninGamecenterWrapperTests/MultiplayerTests.swift"
+      ],
+      "tempsPath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperTests.build",
+      "wholeModuleOptimization" : false
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "DicyaninGamecenterWrapper" : [
+      "/Applications/Xcode 2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "DicyaninGamecenterWrapper",
+      "-package-name",
+      "dicyaningamecenterwrapper",
+      "-c",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/DebugConsoleView.swift",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/GameCenterService.swift",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/LobbyPushDelegate.swift",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/LobbyService.swift",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/MockMultiplayer.swift",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/MultiplayerCore.swift",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/MultiplayerLog.swift",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/NetMessage.swift",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/PlayerListView.swift",
+      "-I",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx10.13",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j12",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/include/DicyaninGamecenterWrapper-Swift.h",
+      "-swift-version",
+      "5",
+      "-plugin-path",
+      "/Applications/Xcode 2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.4.sdk",
+      "-F",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-I",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.4.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "dicyaningamecenterwrapper",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode 2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ],
+    "DicyaninGamecenterWrapperPackageTests" : [
+      "/Applications/Xcode 2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "DicyaninGamecenterWrapperPackageTests",
+      "-package-name",
+      "dicyaningamecenterwrapper",
+      "-c",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.derived/runner.swift",
+      "-I",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx10.13",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-Xfrontend",
+      "-enable-cross-import-overlays",
+      "-j12",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build/include/DicyaninGamecenterWrapperPackageTests-Swift.h",
+      "-plugin-path",
+      "/Applications/Xcode 2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.4.sdk",
+      "-F",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-I",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.4.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "dicyaningamecenterwrapper",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode 2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ],
+    "DicyaninGamecenterWrapperTests" : [
+      "/Applications/Xcode 2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "DicyaninGamecenterWrapperTests",
+      "-package-name",
+      "dicyaningamecenterwrapper",
+      "-c",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Tests/DicyaninGamecenterWrapperTests/LoopbackNetwork.swift",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Tests/DicyaninGamecenterWrapperTests/MultiplayerTests.swift",
+      "-I",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx14.0",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-Xfrontend",
+      "-enable-cross-import-overlays",
+      "-j12",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-swift-version",
+      "5",
+      "-plugin-path",
+      "/Applications/Xcode 2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.4.sdk",
+      "-F",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-I",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.4.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode 2.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "dicyaningamecenterwrapper",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode 2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "DicyaninGamecenterWrapper" : [
+
+    ],
+    "DicyaninGamecenterWrapperPackageTests" : [
+      "DicyaninGamecenterWrapperTests",
+      "DicyaninGamecenterWrapper"
+    ],
+    "DicyaninGamecenterWrapperTests" : [
+      "DicyaninGamecenterWrapper"
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+    "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.derived/runner.swift" : {
+      "inputs" : [
+
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.derived/runner.swift"
+        }
+      ]
+    }
+  },
+  "traitConfiguration" : {
+    "default" : {
+
+    }
+  },
+  "writeCommands" : {
+    "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/DebugConsoleView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/GameCenterService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/LobbyPushDelegate.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/LobbyService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/MockMultiplayer.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/MultiplayerCore.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/MultiplayerLog.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/NetMessage.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Sources/DicyaninGamecenterWrapper/PlayerListView.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/sources"
+    },
+    "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.derived/runner.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build/sources"
+    },
+    "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.product/Objects.LinkFileList" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<link-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/DebugConsoleView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/GameCenterService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/LobbyPushDelegate.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/LobbyService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/MockMultiplayer.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/MultiplayerCore.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/MultiplayerLog.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/NetMessage.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapper.build/PlayerListView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.build/runner.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperTests.build/LoopbackNetwork.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperTests.build/MultiplayerTests.swift.o"
+        }
+      ],
+      "outputFilePath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperPackageTests.product/Objects.LinkFileList"
+    },
+    "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperTests.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Tests/DicyaninGamecenterWrapperTests/LoopbackNetwork.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/Tests/DicyaninGamecenterWrapperTests/MultiplayerTests.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/DicyaninGamecenterWrapperTests.build/sources"
+    },
+    "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/swift-version-BF9FFD6CEA9A4E.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Applications/Xcode 2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/Users/hunter/Dev/DicyaninPackages/DicyaninGamecenterWrapper/.build/arm64-apple-macosx/debug/swift-version-BF9FFD6CEA9A4E.txt"
+    }
+  }
+}

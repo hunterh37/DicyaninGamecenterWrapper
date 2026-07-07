@@ -253,7 +253,7 @@ public struct TapSparkle: Codable, Equatable, Identifiable {
 }
 
 public struct AvatarColor: Codable, Equatable {
-    public init(r: Float, g: Float, b: Float, face: Int? = nil, hat: Int? = nil, material: Int? = nil, prop: Int? = nil, body: Int? = nil, height: Int? = nil, equippedItem: Int? = nil, paint: [String: String]? = nil) {
+    public init(r: Float, g: Float, b: Float, face: Int? = nil, hat: Int? = nil, material: Int? = nil, prop: Int? = nil, body: Int? = nil, height: Int? = nil, equippedItem: Int? = nil, hair: Int? = nil, hairR: Float? = nil, hairG: Float? = nil, hairB: Float? = nil, paint: [String: String]? = nil, flag: String? = nil, status: String? = nil, auraR: Float? = nil, auraG: Float? = nil, auraB: Float? = nil) {
         self.r = r
         self.g = g
         self.b = b
@@ -264,7 +264,16 @@ public struct AvatarColor: Codable, Equatable {
         self.body = body
         self.height = height
         self.equippedItem = equippedItem
+        self.hair = hair
+        self.hairR = hairR
+        self.hairG = hairG
+        self.hairB = hairB
         self.paint = paint
+        self.flag = flag
+        self.status = status
+        self.auraR = auraR
+        self.auraG = auraG
+        self.auraB = auraB
     }
     public var r: Float
     public var g: Float
@@ -286,11 +295,28 @@ public struct AvatarColor: Codable, Equatable {
     // `prop` (the legacy hand-prop picker). Optional so old clients decode
     // without it.
     public var equippedItem: Int?
+    // Hair style raw value. Optional so old clients decode without it.
+    public var hair: Int?
+    // Hair tint channels. Optional so old clients decode without them.
+    public var hairR: Float?
+    public var hairG: Float?
+    public var hairB: Float?
     // Per-body-part painted surface, keyed by BodyPart.rawValue. Each value is a
     // zlib-compressed, base64-encoded RGBA8 256x256 canvas so a painted design
     // travels over the wire and every peer rebuilds the identical mesh texture.
     // Optional so old clients decode without it.
     public var paint: [String: String]?
+    // Nationality flag emoji chosen for the profile. Optional so old clients
+    // decode without it.
+    public var flag: String?
+    // Mood status emoji shown on the profile and above the avatar. Optional so
+    // old clients decode without it.
+    public var status: String?
+    // Personal aura accent color (nametag tint, selection glow, avatar rim).
+    // Optional so old clients decode without it.
+    public var auraR: Float?
+    public var auraG: Float?
+    public var auraB: Float?
 
     public static let `default` = AvatarColor(r: 0.55, g: 0.75, b: 0.95)
 }
