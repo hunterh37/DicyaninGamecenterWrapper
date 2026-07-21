@@ -98,11 +98,12 @@ public struct CodableTransform: Codable, Equatable {
 }
 
 public struct PlayerPose: Codable, Equatable {
-    public init(head: CodableTransform, leftHand: CodableTransform? = nil, rightHand: CodableTransform? = nil, sitting: Bool? = nil) {
+    public init(head: CodableTransform, leftHand: CodableTransform? = nil, rightHand: CodableTransform? = nil, sitting: Bool? = nil, brushCursor: CodableTransform? = nil) {
         self.head = head
         self.leftHand = leftHand
         self.rightHand = rightHand
         self.sitting = sitting
+        self.brushCursor = brushCursor
     }
     public var head: CodableTransform
     public var leftHand: CodableTransform?
@@ -110,6 +111,11 @@ public struct PlayerPose: Codable, Equatable {
     // True while the player is seated. Optional so old clients decode without
     // it. Drives the seated body pose on every peer from this one flag.
     public var sitting: Bool?
+    // World position (room space, same frame as `head`) of the paint brush
+    // while the player is actively painting; nil the rest of the time.
+    // Optional so old clients decode without it. Drives a small brush-cursor
+    // prop that every peer renders following the painter's stroke live.
+    public var brushCursor: CodableTransform?
 }
 
 extension CodableTransform {
@@ -233,6 +239,56 @@ public struct GiftPayload: Codable, Equatable, Identifiable {
     }
 }
 
+// A paint-for-paint trade offer handed from one player to another. offerPacked
+// is the 0xRRGGBB paint the sender is putting up. senderName travels inline so
+// the receiver shows who offered without a roster lookup. The receiver answers
+// with a TradeResponse carrying its own paint back.
+public struct TradePayload: Codable, Equatable, Identifiable {
+    public var id: String
+    public var offerPacked: Int
+    public var senderID: String
+    public var senderName: String
+    public var target: String
+    public var sentAt: Date
+
+    public init(id: String = UUID().uuidString, offerPacked: Int, senderID: String, senderName: String, target: String, sentAt: Date = Date()) {
+        self.id = id
+        self.offerPacked = offerPacked
+        self.senderID = senderID
+        self.senderName = senderName
+        self.target = target
+        self.sentAt = sentAt
+    }
+}
+
+// The receiver's answer to a TradePayload, routed back to the original offerer.
+// offerID matches the offer. When accepted, returnPacked is the paint the
+// receiver gives back and offerPacked echoes the offerer's paint so the
+// offerer shows both sides. When declined, returnPacked is ignored.
+public struct TradeResponse: Codable, Equatable, Identifiable {
+    public var id: String
+    public var offerID: String
+    public var responderID: String
+    public var responderName: String
+    public var target: String
+    public var accepted: Bool
+    public var offerPacked: Int
+    public var returnPacked: Int
+    public var sentAt: Date
+
+    public init(id: String = UUID().uuidString, offerID: String, responderID: String, responderName: String, target: String, accepted: Bool, offerPacked: Int, returnPacked: Int, sentAt: Date = Date()) {
+        self.id = id
+        self.offerID = offerID
+        self.responderID = responderID
+        self.responderName = responderName
+        self.target = target
+        self.accepted = accepted
+        self.offerPacked = offerPacked
+        self.returnPacked = returnPacked
+        self.sentAt = sentAt
+    }
+}
+
 // A world-space tap point that spawns a short-lived shimmer + light effect on
 // every peer. Position is in the shared room frame (sceneRoot local space) so
 // each client renders it at the same spot regardless of locomotion offset.
@@ -252,8 +308,77 @@ public struct TapSparkle: Codable, Equatable, Identifiable {
     }
 }
 
+// A player-to-player touch spark, broadcast to the whole room and shown for a
+// moment as an aura-tinted glow + shimmer at the contact point on every peer
+// including the sender. r/g/b carry the sender's selected aura color so the
+// effect renders in that shade everywhere. Deduped by id.
+public struct CollisionGlow: Codable, Equatable, Identifiable {
+    public var id: String
+    public var x: Float
+    public var y: Float
+    public var z: Float
+    public var r: Float
+    public var g: Float
+    public var b: Float
+    public var senderID: String
+
+    public init(id: String = UUID().uuidString, x: Float, y: Float, z: Float, r: Float, g: Float, b: Float, senderID: String) {
+        self.id = id
+        self.x = x
+        self.y = y
+        self.z = z
+        self.r = r
+        self.g = g
+        self.b = b
+        self.senderID = senderID
+    }
+}
+
+// A "player looted a new color" celebration, broadcast to the whole room and
+// shown for a few seconds as a floating orb over the looter's avatar on every
+// peer (including a local echo). packed is the unlocked 0xRRGGBB shade so the
+// orb renders in that exact color; colorName + senderName travel inline so
+// peers show who unlocked what without a roster lookup.
+public struct ColorUnlock: Codable, Equatable, Identifiable {
+    public var id: String
+    public var senderID: String
+    public var senderName: String
+    public var colorName: String
+    public var packed: Int
+    public var sentAt: Date
+
+    public init(id: String = UUID().uuidString, senderID: String, senderName: String, colorName: String, packed: Int, sentAt: Date = Date()) {
+        self.id = id
+        self.senderID = senderID
+        self.senderName = senderName
+        self.colorName = colorName
+        self.packed = packed
+        self.sentAt = sentAt
+    }
+}
+
+// One world-activity start (fishing, mining, bug catching, ...), broadcast
+// reliably to the whole room including a local echo. stationID maps to a fixed
+// seeded station in the scene; kind is the app's activity catalog raw value.
+// Deduped by id so a relay never double-starts the animation.
+public struct ActivityAction: Codable, Equatable, Identifiable {
+    public var id: String
+    public var stationID: Int
+    public var kind: Int
+    public var playerID: String
+    public var sentAt: Date
+
+    public init(id: String = UUID().uuidString, stationID: Int, kind: Int, playerID: String, sentAt: Date = Date()) {
+        self.id = id
+        self.stationID = stationID
+        self.kind = kind
+        self.playerID = playerID
+        self.sentAt = sentAt
+    }
+}
+
 public struct AvatarColor: Codable, Equatable {
-    public init(r: Float, g: Float, b: Float, face: Int? = nil, hat: Int? = nil, material: Int? = nil, prop: Int? = nil, body: Int? = nil, height: Int? = nil, equippedItem: Int? = nil, hair: Int? = nil, hairR: Float? = nil, hairG: Float? = nil, hairB: Float? = nil, paint: [String: String]? = nil, flag: String? = nil, status: String? = nil, auraR: Float? = nil, auraG: Float? = nil, auraB: Float? = nil) {
+    public init(r: Float, g: Float, b: Float, face: Int? = nil, hat: Int? = nil, material: Int? = nil, prop: Int? = nil, body: Int? = nil, height: Int? = nil, equippedItem: Int? = nil, hair: Int? = nil, hairR: Float? = nil, hairG: Float? = nil, hairB: Float? = nil, paint: [String: String]? = nil, flag: String? = nil, status: String? = nil, auraR: Float? = nil, auraG: Float? = nil, auraB: Float? = nil, nameEffect: Int? = nil) {
         self.r = r
         self.g = g
         self.b = b
@@ -274,6 +399,7 @@ public struct AvatarColor: Codable, Equatable {
         self.auraR = auraR
         self.auraG = auraG
         self.auraB = auraB
+        self.nameEffect = nameEffect
     }
     public var r: Float
     public var g: Float
@@ -317,8 +443,157 @@ public struct AvatarColor: Codable, Equatable {
     public var auraR: Float?
     public var auraG: Float?
     public var auraB: Float?
+    // Animated 3D nametag style raw value (AvatarNameEffect). Optional so old
+    // clients decode without it.
+    public var nameEffect: Int?
 
     public static let `default` = AvatarColor(r: 0.55, g: 0.75, b: 0.95)
+}
+
+// MARK: - Minigames
+
+// Catalog of battle minigames playable inside a lobby. New games add a case
+// here plus app-side rules; the wire and lifecycle plumbing is shared.
+public enum MinigameKind: Int, Codable, CaseIterable, Identifiable {
+    case paintRush = 0
+    case voxelBall = 1
+    case soccer = 2
+
+    public var id: Int { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .paintRush: return "Paint Rush"
+        case .voxelBall: return "Voxel Rumble"
+        case .soccer: return "Soccer Showdown"
+        }
+    }
+
+    public var blurb: String {
+        switch self {
+        case .paintRush: return "Paint the most objects in your color before time runs out"
+        case .voxelBall: return "Dash the ball into the walls. Claim the most voxels in your color."
+        case .soccer: return "Two teams, one ball. Tackle to steal it, shoot it into the other goal."
+        }
+    }
+
+    // Round length in seconds.
+    public var duration: TimeInterval {
+        switch self {
+        case .paintRush: return 60
+        case .voxelBall: return 90
+        case .soccer: return 120
+        }
+    }
+
+    public var minPlayers: Int { 2 }
+}
+
+// Authoritative flying-ball state for Voxel Rumble, broadcast unreliably at
+// ~15 Hz by the player who currently owns the ball (or the round host while
+// the ball is still neutral). ownerID is empty while neutral; packed is the
+// owner's battle color. seq is a monotonic stamp for last-write-wins so a
+// stale packet never rewinds a fresher one after an ownership handoff.
+public struct BallSync: Codable, Equatable {
+    public var gameID: String
+    public var ownerID: String
+    public var packed: Int
+    public var px: Float
+    public var py: Float
+    public var pz: Float
+    public var vx: Float
+    public var vy: Float
+    public var vz: Float
+    public var seq: Int
+
+    public init(gameID: String, ownerID: String, packed: Int,
+                px: Float, py: Float, pz: Float,
+                vx: Float, vy: Float, vz: Float, seq: Int) {
+        self.gameID = gameID
+        self.ownerID = ownerID
+        self.packed = packed
+        self.px = px; self.py = py; self.pz = pz
+        self.vx = vx; self.vy = vy; self.vz = vz
+        self.seq = seq
+    }
+}
+
+// A lobby-wide invitation to a minigame round, broadcast by the host of the
+// round. Peers accept or decline via minigameInviteResponse.
+public struct MinigameInvite: Codable, Equatable, Identifiable {
+    public var id: String
+    public var kind: Int
+    public var hostID: String
+    public var hostName: String
+    public var sentAt: Date
+
+    public init(id: String = UUID().uuidString, kind: Int, hostID: String, hostName: String, sentAt: Date = Date()) {
+        self.id = id
+        self.kind = kind
+        self.hostID = hostID
+        self.hostName = hostName
+        self.sentAt = sentAt
+    }
+}
+
+// Authoritative round start, sent reliably by the round host to everyone.
+// Only players listed in `players` participate; everyone else ignores it.
+public struct MinigameStart: Codable, Equatable {
+    public var gameID: String
+    public var kind: Int
+    public var hostID: String
+    public var players: [String]
+    public var startedAt: Date
+    public var endsAt: Date
+
+    public init(gameID: String, kind: Int, hostID: String, players: [String], startedAt: Date = Date(), endsAt: Date) {
+        self.gameID = gameID
+        self.kind = kind
+        self.hostID = hostID
+        self.players = players
+        self.startedAt = startedAt
+        self.endsAt = endsAt
+    }
+}
+
+// One generic in-round action. For paint rush: key is the painted object's
+// editID and value is the painter's packed 0xRRGGBB color. Future games reuse
+// the same envelope with their own key/value meanings.
+public struct MinigameEvent: Codable, Equatable {
+    public var gameID: String
+    public var playerID: String
+    public var key: String
+    public var value: Int
+
+    public init(gameID: String, playerID: String, key: String, value: Int) {
+        self.gameID = gameID
+        self.playerID = playerID
+        self.key = key
+        self.value = value
+    }
+}
+
+// Authoritative round results, sent reliably by the round host when the
+// timer expires. Scores are final; highest score wins.
+public struct MinigameEnd: Codable, Equatable {
+    public var gameID: String
+    public var kind: Int
+    public var scores: [String: Int]
+    public var endedAt: Date
+
+    public init(gameID: String, kind: Int, scores: [String: Int], endedAt: Date = Date()) {
+        self.gameID = gameID
+        self.kind = kind
+        self.scores = scores
+        self.endedAt = endedAt
+    }
+
+    public var winnerID: String? {
+        scores.max { a, b in
+            if a.value != b.value { return a.value < b.value }
+            return a.key > b.key
+        }?.key
+    }
 }
 
 public enum NetMessage: Codable, Equatable {
@@ -352,6 +627,11 @@ public enum NetMessage: Codable, Equatable {
     // Player-to-player item gift, sent reliably. Broadcast to the room; only
     // the peer whose id matches payload.target acts on it.
     case gift(GiftPayload)
+    // Player-to-player paint trade handshake, both sent reliably. tradeOffer
+    // proposes a paint to the target; tradeResponse routes the answer back to
+    // the original offerer. Both broadcast; only the payload target acts.
+    case tradeOffer(TradePayload)
+    case tradeResponse(TradeResponse)
     // Player-to-player heart reaction, sent reliably. Broadcast to the room;
     // only the peer whose id matches payload.target acts on it.
     case heart(HeartPayload)
@@ -361,6 +641,41 @@ public enum NetMessage: Codable, Equatable {
     // Transient tap shimmer effect, broadcast to the whole room and shown for a
     // few seconds at the tap position on every peer including the sender.
     case tap(TapSparkle)
+    // Transient player-to-player touch spark, broadcast to the whole room and
+    // shown at the contact point in the sender's aura color on every peer
+    // including the sender. Deduped by id.
+    case collisionGlow(CollisionGlow)
+    // A prop-loot color unlock celebration, broadcast to the whole room and
+    // shown as a floating orb over the looter on every peer including the
+    // sender. Deduped by id so a relay never double-spawns it.
+    case colorUnlock(ColorUnlock)
+    // A world-activity start (fishing, mining, ...), broadcast to the whole
+    // room so every peer plays the performer's tool-in-hand animation at the
+    // same station. Deduped by id.
+    case activity(ActivityAction)
+    // Shared room skybox selection, sent reliably. Last write wins per room so
+    // every peer converges on the latest dome. Host replays the live value on
+    // peer connect so late joiners land on the right skybox.
+    case skybox(SkyboxState)
+    // Minigame lifecycle, all sent reliably. Invite broadcasts a round offer
+    // to the lobby; responses flow back to the round host; start locks the
+    // roster and timer; events carry in-round actions; end carries the
+    // authoritative final scores.
+    case minigameInvite(MinigameInvite)
+    case minigameInviteResponse(gameID: String, accepted: Bool)
+    case minigameStart(MinigameStart)
+    case minigameEvent(MinigameEvent)
+    case minigameEnd(MinigameEnd)
+    // Voxel Rumble flying-ball state, sent unreliably by the ball's current
+    // owner. Carries position, velocity, owner, and color so peers render and
+    // (on the owner) simulate a single shared ball.
+    case minigameBall(BallSync)
+
+    // Connectivity probe. Unreliable, tiny, fired on a timer. A peer that
+    // receives a ping echoes it back as a pong; the origin matches the seq
+    // against its send timestamp to measure round-trip time per peer.
+    case ping(origin: String, seq: UInt32)
+    case pong(origin: String, seq: UInt32)
 
     public static func decode(_ data: Data) -> NetMessage? {
         try? JSONDecoder().decode(NetMessage.self, from: data)

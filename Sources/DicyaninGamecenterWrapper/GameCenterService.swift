@@ -65,9 +65,30 @@ public final class GameCenterService: NSObject, ObservableObject {
     // this into a real GKMatch; the flag clears the moment a match arrives.
     @Published public var isSoloSession = false
     // Single source of truth. Views observe it through the forwarders below.
-    @Published public private(set) var state = MultiplayerState(localPlayerID: GKLocalPlayer.local.gamePlayerID)
+    @Published public private(set) var state = MultiplayerState(localPlayerID: GKLocalPlayer.local.gamePlayerID) {
+        didSet {
+            // Dedicated chat feed so chat UI never subscribes to the ~15Hz
+            // `state` firehose (poses/props/emotes). Republish only when the
+            // log actually changes, using a cheap count/last-id check instead
+            // of full array equality on every network tick.
+            if state.chatLog.count != chatFeed.count || state.chatLog.last?.id != chatFeed.last?.id {
+                chatFeed = state.chatLog
+            }
+        }
+    }
+    // Chat-only publisher. Emits solely when chatLog changes, decoupling the
+    // chat composer from the high-frequency `state` updates.
+    @Published public private(set) var chatFeed: [ChatMessage] = []
     // Display names keyed by gamePlayerID, for the in-session player list.
     @Published public private(set) var playerNames: [String: String] = [:]
+
+    // Live round-trip time per remote peer in milliseconds, smoothed with an
+    // exponential moving average. Driven by the unreliable ping/pong loop so
+    // the player list can show connection quality without touching `state`.
+    @Published public private(set) var pingMillis: [String: Int] = [:]
+    private var pingTimer: Timer?
+    private var pingSeq: UInt32 = 0
+    private var pingSent: [UInt32: Date] = [:]
 
     // Player-chosen display name persisted on device. When set, it overrides
     // the Game Center alias everywhere the local player's name is shown.
@@ -99,15 +120,51 @@ public final class GameCenterService: NSObject, ObservableObject {
         get { state.pendingHearts }
         set { state.pendingHearts = newValue }
     }
+    // Paint trade offers received by the local player awaiting a response.
+    public var pendingTradeOffers: [TradePayload] {
+        get { state.pendingTradeOffers }
+        set { state.pendingTradeOffers = newValue }
+    }
+    // Paint trade responses routed back to the local player (the offerer).
+    public var pendingTradeResponses: [TradeResponse] {
+        get { state.pendingTradeResponses }
+        set { state.pendingTradeResponses = newValue }
+    }
     // Tap shimmer effects awaiting a spawn in the scene. The app drains this.
     public var pendingTaps: [TapSparkle] {
         get { state.pendingTaps }
         set { state.pendingTaps = newValue }
     }
+    // Player-to-player touch sparks awaiting a spawn in the scene. The app drains this.
+    public var pendingCollisionGlows: [CollisionGlow] {
+        get { state.pendingCollisionGlows }
+        set { state.pendingCollisionGlows = newValue }
+    }
+    // Color-unlock celebrations awaiting a floating orb in the scene. The app
+    // drains this to spawn the orb over the looter's avatar.
+    public var pendingColorUnlocks: [ColorUnlock] {
+        get { state.pendingColorUnlocks }
+        set { state.pendingColorUnlocks = newValue }
+    }
+    // World-activity starts awaiting application to a scene station. The app
+    // drains this to attach the performer's tool and run the station timer.
+    public var pendingActivities: [ActivityAction] {
+        get { state.pendingActivities }
+        set { state.pendingActivities = newValue }
+    }
     // Incoming dance requests awaiting a local accept/decline, by requester id.
     public var pendingDanceRequests: [String] { state.pendingDanceRequests }
     // Peers the local player is actively dancing with.
     public var dancingPartners: Set<String> { state.dancingPartners }
+    // Current shared room skybox. Driven by the picker view and applied to the
+    // immersive dome via ImmersiveView onChange.
+    public var skybox: SkyboxState { state.skybox }
+    // Minigame round state forwarders.
+    public var pendingMinigameInvites: [MinigameInvite] { state.pendingMinigameInvites }
+    public var minigameAcceptances: [String: Set<String>] { state.minigameAcceptances }
+    public var activeMinigame: MinigameStart? { state.activeMinigame }
+    public var minigameClaims: [String: MinigameClaim] { state.minigameClaims }
+    public var minigameResults: MinigameEnd? { state.minigameResults }
 
     // Lobby size cap. Game Center peer-to-peer real-time matches allow at
     // most this many players; requests are clamped to it.
@@ -314,13 +371,18 @@ public final class GameCenterService: NSObject, ObservableObject {
     // Global quick-match queue, always joinable. Surfaced as its own primary
     // action in the UI instead of a row in the lobby list.
     public func quickPlay(maxPlayers: Int = lobbyCapacity) {
-        log.info("Join", "Quick play into global group 1 (15s before solo lobby)")
+        log.info("Join", "Quick play: entering solo now, filling group 1 in background")
         isAutoMatchmaking = false
-        startMatchmaking(request: standardRequest(maxPlayers: maxPlayers, playerGroup: 1))
         quickPlayTimer?.invalidate()
-        quickPlayTimer = Timer.scheduledTimer(withTimeInterval: Self.quickPlayTimeout, repeats: false) { [weak self] _ in
-            Task { @MainActor in self?.quickPlayTimedOut(maxPlayers: maxPlayers) }
-        }
+        quickPlayTimer = nil
+        // Enter the arena alone immediately; keep searching group 1 so peers can
+        // connect and upgrade this into a real GKMatch without a wait.
+        let keepColor = state.localColor
+        state = MultiplayerState(localPlayerID: localPlayerID)
+        state.localColor = keepColor
+        playerNames.removeAll()
+        isSoloSession = true
+        startMatchmaking(request: standardRequest(maxPlayers: maxPlayers, playerGroup: 1))
     }
 
     // Quick play found no one in time: stop searching the global queue and
@@ -519,6 +581,7 @@ public final class GameCenterService: NSObject, ObservableObject {
         isSoloSession = false
         match.delegate = self
         self.match = match
+        startPingLoop()
         for player in match.players {
             state.connectedPeers.insert(player.gamePlayerID)
             playerNames[player.gamePlayerID] = player.displayName
@@ -607,6 +670,7 @@ public final class GameCenterService: NSObject, ObservableObject {
         }
         match?.disconnect()
         match = nil
+        stopPingLoop()
         let keepColor = state.localColor
         state = MultiplayerState(localPlayerID: localPlayerID)
         state.localColor = keepColor
@@ -633,6 +697,13 @@ public final class GameCenterService: NSObject, ObservableObject {
 
     // MARK: - Mock session (offline testing)
 
+    // Dev-only crash bisection switches. When true the corresponding
+    // subsystem is skipped inside startMockSession so a device-only crash can
+    // be isolated one stage at a time. Set by the app before starting a mock
+    // session; never touched by production code paths.
+    public var devDisableMockDriver = false
+    public var devDisablePingLoop = false
+
     public func startMockSession(playerCount: Int) {
         guard match == nil else { return }
         let keepColor = state.localColor
@@ -640,12 +711,20 @@ public final class GameCenterService: NSObject, ObservableObject {
         state.localColor = keepColor
         playerNames.removeAll()
         isMockSession = true
-        mockDriver.start(playerCount: playerCount)
+        log.info("Mock", "startMockSession begin (driver \(devDisableMockDriver ? "skipped" : "on"), ping \(devDisablePingLoop ? "skipped" : "on"))")
+        if !devDisableMockDriver {
+            mockDriver.start(playerCount: playerCount)
+        }
+        if !devDisablePingLoop {
+            startPingLoop()
+        }
+        log.info("Mock", "startMockSession complete")
     }
 
     public func stopMockSession() {
         mockDriver.stop()
         isMockSession = false
+        stopPingLoop()
         let keepColor = state.localColor
         state = MultiplayerState(localPlayerID: localPlayerID)
         state.localColor = keepColor
@@ -726,6 +805,65 @@ public final class GameCenterService: NSObject, ObservableObject {
         send(MultiplayerReducer.sendTap(tap, into: &state))
     }
 
+    // Broadcasts an aura-tinted touch spark at a room-frame contact point and
+    // echoes it locally so the toucher sees their own glow immediately. Sent
+    // unreliably: it is a cosmetic, self-expiring effect.
+    public func sendCollisionGlow(at position: SIMD3<Float>, color: SIMD3<Float>) {
+        let glow = CollisionGlow(x: position.x, y: position.y, z: position.z, r: color.x, g: color.y, b: color.z, senderID: localPlayerID)
+        state.pendingCollisionGlows.append(glow)
+        guard !isMockSession else { return }
+        send(MultiplayerReducer.sendCollisionGlow(glow, into: &state))
+    }
+
+    // Removes a consumed touch spark once the app has spawned its effect.
+    public func clearCollisionGlow(_ id: String) {
+        state.pendingCollisionGlows.removeAll { $0.id == id }
+    }
+
+    // MARK: - Color unlocks
+
+    // Broadcasts a prop-loot color unlock to the whole room and echoes it
+    // locally so the looter sees the celebration orb over their own avatar
+    // immediately. Mock sessions skip the wire and echo only.
+    public func sendColorUnlock(colorName: String, packed: Int) {
+        let unlock = ColorUnlock(senderID: localPlayerID, senderName: localName, colorName: colorName, packed: packed)
+        state.pendingColorUnlocks.append(unlock)
+        guard !isMockSession else { return }
+        send(MultiplayerReducer.sendColorUnlock(unlock, into: &state))
+    }
+
+    // Removes a consumed color unlock once the app has spawned its orb.
+    public func clearColorUnlock(_ id: String) {
+        state.pendingColorUnlocks.removeAll { $0.id == id }
+    }
+
+    // Broadcasts a world-activity start (fishing, mining, ...) and echoes it
+    // locally so the performer's own client animates with no round-trip.
+    public func sendActivity(stationID: Int, kind: Int) {
+        let action = ActivityAction(stationID: stationID, kind: kind, playerID: localPlayerID)
+        state.pendingActivities.append(action)
+        guard !isMockSession else { return }
+        send(MultiplayerReducer.sendActivity(action, into: &state))
+    }
+
+    // Removes a consumed activity start once the app has applied it.
+    public func clearActivity(_ id: String) {
+        state.pendingActivities.removeAll { $0.id == id }
+    }
+
+    // Picks the room's shared skybox. Local state updates immediately so the
+    // picker sees their own dome swap with no round-trip, then the choice is
+    // broadcast reliably so every peer adopts it. Mock sessions skip the wire
+    // and stomp local state only so the offline flow can be exercised.
+    public func setSkybox(id: Int) {
+        let next = SkyboxState(skyboxID: id, pickerID: localPlayerID)
+        if isMockSession {
+            MultiplayerReducer.applySkybox(next, into: &state)
+            return
+        }
+        send(MultiplayerReducer.setSkybox(next, into: &state))
+    }
+
     // MARK: - Gifting
 
     // Sends an item from the local player to a peer. The itemID maps to the
@@ -746,6 +884,54 @@ public final class GameCenterService: NSObject, ObservableObject {
     // Removes a consumed gift once the app has granted and revealed it.
     public func clearGift(_ id: String) {
         state.pendingGifts.removeAll { $0.id == id }
+    }
+
+    // MARK: - Paint trading
+
+    // Offers one of the local player's paints (packed 0xRRGGBB) to a peer. In a
+    // mock session the offer loops back locally so the receive flow can be
+    // exercised offline.
+    public func sendTradeOffer(offerPacked: Int, to playerID: String) {
+        guard playerID != localPlayerID else { return }
+        let offer = TradePayload(offerPacked: offerPacked, senderID: localPlayerID, senderName: localName, target: playerID)
+        if isMockSession {
+            var loop = offer
+            loop.target = localPlayerID
+            state.pendingTradeOffers.append(loop)
+            return
+        }
+        send(MultiplayerReducer.sendTradeOffer(offer, into: &state))
+    }
+
+    // Answers a received offer with the local player's paint. When declined,
+    // returnPacked is ignored. In a mock session the response loops back so the
+    // offerer-side reveal can be tested offline.
+    public func sendTradeResponse(to offer: TradePayload, accepted: Bool, returnPacked: Int) {
+        let response = TradeResponse(
+            offerID: offer.id,
+            responderID: localPlayerID,
+            responderName: localName,
+            target: offer.senderID,
+            accepted: accepted,
+            offerPacked: offer.offerPacked,
+            returnPacked: returnPacked
+        )
+        if isMockSession {
+            state.pendingTradeOffers.removeAll { $0.id == offer.id }
+            var loop = response
+            loop.target = localPlayerID
+            state.pendingTradeResponses.append(loop)
+            return
+        }
+        send(MultiplayerReducer.sendTradeResponse(response, into: &state))
+    }
+
+    public func clearTradeOffer(_ id: String) {
+        state.pendingTradeOffers.removeAll { $0.id == id }
+    }
+
+    public func clearTradeResponse(_ id: String) {
+        state.pendingTradeResponses.removeAll { $0.id == id }
     }
 
     // MARK: - Hearts
@@ -861,6 +1047,106 @@ public final class GameCenterService: NSObject, ObservableObject {
         _ = MultiplayerReducer.apply(.chat(message), from: message.senderID, into: &state)
     }
 
+    // MARK: - Minigames
+
+    // Offers a minigame round to the whole lobby. Returns the round id the
+    // host uses to watch acceptances and start the round. In a mock session
+    // every fake player accepts immediately so the flow is testable offline.
+    @discardableResult
+    public func inviteToMinigame(_ kind: MinigameKind) -> String {
+        let invite = MinigameInvite(kind: kind.rawValue, hostID: localPlayerID, hostName: localName)
+        if isMockSession {
+            var accepted: Set<String> = [localPlayerID]
+            for id in state.connectedPeers { accepted.insert(id) }
+            state.minigameAcceptances[invite.id] = accepted
+            return invite.id
+        }
+        send(MultiplayerReducer.sendMinigameInvite(invite, into: &state))
+        return invite.id
+    }
+
+    public func respondToMinigameInvite(_ gameID: String, accepted: Bool) {
+        if isMockSession {
+            state.pendingMinigameInvites.removeAll { $0.id == gameID }
+            return
+        }
+        send(MultiplayerReducer.respondMinigameInvite(gameID: gameID, accepted: accepted, into: &state))
+    }
+
+    // Round host only: locks in everyone who accepted and starts the round.
+    // Refuses to start below the game's minimum player count.
+    @discardableResult
+    public func startMinigame(_ gameID: String, kind: MinigameKind) -> Bool {
+        let players = Array(state.minigameAcceptances[gameID] ?? [localPlayerID]).sorted()
+        guard players.count >= kind.minPlayers else { return false }
+        let start = MinigameStart(
+            gameID: gameID,
+            kind: kind.rawValue,
+            hostID: localPlayerID,
+            players: players,
+            endsAt: Date().addingTimeInterval(kind.duration)
+        )
+        log.info("Minigame", "Starting \(kind.displayName) players=\(players.count)")
+        if isMockSession {
+            MultiplayerReducer.applyMinigameStart(start, into: &state)
+            return true
+        }
+        send(MultiplayerReducer.startMinigame(start, into: &state))
+        return true
+    }
+
+    // Claims one object for the local player in the active round.
+    public func sendMinigameClaim(key: String, packed: Int) {
+        if isMockSession {
+            guard state.activeMinigame != nil else { return }
+            state.minigameClaims[key] = MinigameClaim(playerID: localPlayerID, packed: packed)
+            return
+        }
+        send(MultiplayerReducer.sendMinigameClaim(key: key, packed: packed, into: &state))
+    }
+
+    // Latest flying-ball state for Voxel Rumble, nil outside that round.
+    public var minigameBall: BallSync? { state.minigameBall }
+
+    // Voxel Rumble: the ball's current owner broadcasts its authoritative
+    // state. Echoed into local state immediately so the owner never fights its
+    // own stale packet.
+    public func sendMinigameBall(_ sync: BallSync) {
+        if isMockSession {
+            state.minigameBall = sync
+            return
+        }
+        send(MultiplayerReducer.sendMinigameBall(sync, into: &state))
+    }
+
+    // Live per-player scores for the active round.
+    public var minigameLiveScores: [String: Int] { MultiplayerReducer.minigameScores(state) }
+
+    // Round host only: tallies final scores and ends the round everywhere.
+    public func endMinigame() {
+        if isMockSession {
+            guard let game = state.activeMinigame else { return }
+            let end = MinigameEnd(gameID: game.gameID, kind: game.kind, scores: MultiplayerReducer.minigameScores(state))
+            MultiplayerReducer.applyMinigameEnd(end, into: &state)
+            return
+        }
+        send(MultiplayerReducer.endMinigame(into: &state))
+    }
+
+    // Local only: dismisses the game over screen and returns to the lobby.
+    public func clearMinigameResults() {
+        state.minigameResults = nil
+        state.minigameClaims = [:]
+        state.minigameBall = nil
+    }
+
+    // Local only: bails out of a round (round host vanished, player left).
+    public func abandonMinigame() {
+        state.activeMinigame = nil
+        state.minigameClaims = [:]
+        state.minigameBall = nil
+    }
+
     // MARK: - Receiving
 
     fileprivate func receive(_ data: Data, fromPlayerID playerID: String) {
@@ -879,7 +1165,77 @@ public final class GameCenterService: NSObject, ObservableObject {
             if !trimmed.isEmpty { playerNames[playerID] = trimmed }
             return
         }
+        switch NetMessage.decode(data) {
+        case .ping(let origin, let seq)?:
+            // Echo straight back, unreliable. Cheap enough to send to all;
+            // peers that did not originate the seq ignore the pong.
+            if let match, let reply = NetMessage.pong(origin: origin, seq: seq).encoded() {
+                try? match.sendData(toAllPlayers: reply, with: .unreliable)
+            }
+            return
+        case .pong(let origin, let seq)?:
+            guard origin == localPlayerID, let sentAt = pingSent.removeValue(forKey: seq) else { return }
+            recordPing(Date().timeIntervalSince(sentAt) * 1000, for: playerID)
+            return
+        default:
+            break
+        }
         send(MultiplayerReducer.receive(data, from: playerID, into: &state))
+    }
+
+    // MARK: - Connectivity (ping)
+
+    private static let pingInterval: TimeInterval = 2
+
+    private func startPingLoop() {
+        pingTimer?.invalidate()
+        pingTimer = Timer.scheduledTimer(withTimeInterval: Self.pingInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.pingTick() }
+        }
+        pingTick()
+    }
+
+    private func stopPingLoop() {
+        pingTimer?.invalidate()
+        pingTimer = nil
+        pingSent.removeAll()
+        if !pingMillis.isEmpty { pingMillis = [:] }
+    }
+
+    private func pingTick() {
+        if isMockSession {
+            // Fake but lively values so the mock session exercises the UI.
+            var next: [String: Int] = [:]
+            for id in state.connectedPeers {
+                let base = 30 + abs(id.hashValue % 90)
+                next[id] = max(8, base + Int.random(in: -12...12))
+            }
+            pingMillis = next
+            return
+        }
+        guard let match else { return }
+        // Drop peers that left and probes that never came back.
+        let peers = state.connectedPeers
+        let stale = pingMillis.keys.filter { !peers.contains($0) }
+        for key in stale { pingMillis.removeValue(forKey: key) }
+        let cutoff = Date().addingTimeInterval(-Self.pingInterval * 5)
+        pingSent = pingSent.filter { $0.value > cutoff }
+
+        pingSeq &+= 1
+        pingSent[pingSeq] = Date()
+        if let data = NetMessage.ping(origin: localPlayerID, seq: pingSeq).encoded() {
+            try? match.sendData(toAllPlayers: data, with: .unreliable)
+        }
+    }
+
+    private func recordPing(_ rttMillis: Double, for playerID: String) {
+        let clamped = max(1, min(999, Int(rttMillis.rounded())))
+        if let previous = pingMillis[playerID] {
+            // EMA keeps the readout steady instead of jittering every probe.
+            pingMillis[playerID] = Int((Double(previous) * 0.7 + Double(clamped) * 0.3).rounded())
+        } else {
+            pingMillis[playerID] = clamped
+        }
     }
 
     fileprivate func playerConnectionChanged(_ playerID: String, name: String?, connected: Bool) {

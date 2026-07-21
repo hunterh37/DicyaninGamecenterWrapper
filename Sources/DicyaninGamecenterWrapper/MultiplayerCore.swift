@@ -42,12 +42,46 @@ public struct MultiplayerState: Equatable {
     // Hearts received by the local player that the app has not yet consumed,
     // oldest first. The app drains this to show the banner and particle burst.
     public var pendingHearts: [HeartPayload] = []
+    // Paint trade offers received by the local player awaiting an accept or
+    // decline, oldest first. The app drains this to prompt the receiver.
+    public var pendingTradeOffers: [TradePayload] = []
+    // Paint trade responses routed back to the local player (the original
+    // offerer), oldest first. The app drains this to reveal the outcome.
+    public var pendingTradeResponses: [TradeResponse] = []
     // Tap shimmer effects received (from any peer, including a local echo) that
     // the app has not yet spawned in the scene, oldest first.
     public var pendingTaps: [TapSparkle] = []
+    // Player-to-player touch sparks received (from any peer, including a local
+    // echo) that the app has not yet spawned in the scene, oldest first.
+    public var pendingCollisionGlows: [CollisionGlow] = []
+    // Color-unlock celebrations received (from any peer, including a local echo)
+    // that the app has not yet spawned as a floating orb, oldest first.
+    public var pendingColorUnlocks: [ColorUnlock] = []
+    // World-activity starts received (from any peer, including a local echo)
+    // that the app has not yet applied to a station, oldest first.
+    public var pendingActivities: [ActivityAction] = []
+    // Current shared room skybox. Last write wins; host relays the live value
+    // to joining peers via peerChanged so late joiners land on the right dome.
+    public var skybox: SkyboxState = .default
     // keyed by player id with the moment they departed. Their last pose and
     // color are kept in remotePoses/remoteColors until pruned or they rejoin.
     public var ghostPeers: [String: Date] = [:]
+    // Minigame invites received from a round host, awaiting accept/decline.
+    public var pendingMinigameInvites: [MinigameInvite] = []
+    // Accepted players per offered round, keyed by gameID. The round host
+    // reads this to know when enough players are in to start.
+    public var minigameAcceptances: [String: Set<String>] = [:]
+    // The live round the local player is participating in, nil outside games.
+    public var activeMinigame: MinigameStart?
+    // Live per-object ownership for the active round, keyed by the game's
+    // object key (paint rush: editID). Last claim wins, so repainting steals.
+    public var minigameClaims: [String: MinigameClaim] = [:]
+    // Final results awaiting the local game over screen. The app clears this
+    // when the player taps back to the lobby.
+    public var minigameResults: MinigameEnd?
+    // Latest flying-ball state for Voxel Rumble, nil outside that round. Written
+    // by inbound owner packets and by the local owner's simulation.
+    public var minigameBall: BallSync?
 
     public init(localPlayerID: String) {
         self.localPlayerID = localPlayerID
@@ -67,6 +101,18 @@ public struct PendingEmote: Equatable {
 public struct PendingChat: Equatable {
     public let playerID: String
     public let text: String
+}
+
+// One claimed object in the active minigame round: who owns it and the
+// packed 0xRRGGBB color it was painted with.
+public struct MinigameClaim: Equatable {
+    public let playerID: String
+    public let packed: Int
+
+    public init(playerID: String, packed: Int) {
+        self.playerID = playerID
+        self.packed = packed
+    }
 }
 
 // Pure reducer. Every function returns the messages the transport must send.
@@ -163,6 +209,17 @@ public enum MultiplayerReducer {
         [RelayMessage(message: .gift(gift), reliable: true)]
     }
 
+    // MARK: Paint trading
+
+    public static func sendTradeOffer(_ offer: TradePayload, into state: inout MultiplayerState) -> [RelayMessage] {
+        [RelayMessage(message: .tradeOffer(offer), reliable: true)]
+    }
+
+    public static func sendTradeResponse(_ response: TradeResponse, into state: inout MultiplayerState) -> [RelayMessage] {
+        state.pendingTradeOffers.removeAll { $0.id == response.offerID }
+        return [RelayMessage(message: .tradeResponse(response), reliable: true)]
+    }
+
     // MARK: Hearts
 
     public static func sendHeart(_ heart: HeartPayload, into state: inout MultiplayerState) -> [RelayMessage] {
@@ -173,6 +230,38 @@ public enum MultiplayerReducer {
 
     public static func sendTap(_ tap: TapSparkle, into state: inout MultiplayerState) -> [RelayMessage] {
         [RelayMessage(message: .tap(tap), reliable: true)]
+    }
+
+    public static func sendCollisionGlow(_ glow: CollisionGlow, into state: inout MultiplayerState) -> [RelayMessage] {
+        [RelayMessage(message: .collisionGlow(glow), reliable: false)]
+    }
+
+    // MARK: Color unlocks
+
+    public static func sendColorUnlock(_ unlock: ColorUnlock, into state: inout MultiplayerState) -> [RelayMessage] {
+        [RelayMessage(message: .colorUnlock(unlock), reliable: true)]
+    }
+
+    // MARK: Activities
+
+    public static func sendActivity(_ action: ActivityAction, into state: inout MultiplayerState) -> [RelayMessage] {
+        [RelayMessage(message: .activity(action), reliable: true)]
+    }
+
+    // MARK: Skybox
+
+    // Picks the room's shared skybox. Local write updates state immediately so
+    // the picker sees their own dome swap with no round-trip latency, then the
+    // choice is broadcast reliably so every peer adopts it. Last write wins:
+    // an incoming older change is dropped.
+    public static func setSkybox(_ skybox: SkyboxState, into state: inout MultiplayerState) -> [RelayMessage] {
+        applySkybox(skybox, into: &state)
+        return [RelayMessage(message: .skybox(skybox), reliable: true)]
+    }
+
+    static func applySkybox(_ skybox: SkyboxState, into state: inout MultiplayerState) {
+        guard skybox.changedAt >= state.skybox.changedAt else { return }
+        state.skybox = skybox
     }
 
     public static func makeProps(_ props: [PropState], reliable: Bool = false, into state: inout MultiplayerState) -> RelayMessage {
@@ -190,6 +279,86 @@ public enum MultiplayerReducer {
         var roster = state.remoteColors
         roster[state.localPlayerID] = state.localColor
         return [RelayMessage(message: .roster(roster), reliable: true)]
+    }
+
+    // Host replays the live room skybox so a late joiner adopts the dome
+    // immediately without the picker having to re-tap.
+    private static func broadcastSkybox(_ state: MultiplayerState) -> [RelayMessage] {
+        guard state.isHost else { return [] }
+        return [RelayMessage(message: .skybox(state.skybox), reliable: true)]
+    }
+
+    // MARK: Minigames
+
+    // Round host offers a game to the lobby. The host counts as accepted.
+    public static func sendMinigameInvite(_ invite: MinigameInvite, into state: inout MultiplayerState) -> [RelayMessage] {
+        state.minigameAcceptances[invite.id] = [invite.hostID]
+        return [RelayMessage(message: .minigameInvite(invite), reliable: true)]
+    }
+
+    public static func respondMinigameInvite(gameID: String, accepted: Bool, into state: inout MultiplayerState) -> [RelayMessage] {
+        state.pendingMinigameInvites.removeAll { $0.id == gameID }
+        if accepted {
+            state.minigameAcceptances[gameID, default: []].insert(state.localPlayerID)
+        }
+        return [RelayMessage(message: .minigameInviteResponse(gameID: gameID, accepted: accepted), reliable: true)]
+    }
+
+    // Round host locks the roster and timer and starts the round everywhere.
+    public static func startMinigame(_ start: MinigameStart, into state: inout MultiplayerState) -> [RelayMessage] {
+        applyMinigameStart(start, into: &state)
+        return [RelayMessage(message: .minigameStart(start), reliable: true)]
+    }
+
+    static func applyMinigameStart(_ start: MinigameStart, into state: inout MultiplayerState) {
+        state.minigameAcceptances.removeValue(forKey: start.gameID)
+        state.pendingMinigameInvites.removeAll { $0.id == start.gameID }
+        guard start.players.contains(state.localPlayerID) else { return }
+        state.activeMinigame = start
+        state.minigameClaims = [:]
+        state.minigameResults = nil
+        state.minigameBall = nil
+    }
+
+    // Broadcasts the owner's authoritative ball state. Sent unreliably: a
+    // dropped frame is harmless, the next tick supersedes it.
+    public static func sendMinigameBall(_ sync: BallSync, into state: inout MultiplayerState) -> [RelayMessage] {
+        state.minigameBall = sync
+        return [RelayMessage(message: .minigameBall(sync), reliable: false)]
+    }
+
+    // Claims one object for the local player in the active round. Last claim
+    // wins, so painting over a rival's object steals it.
+    public static func sendMinigameClaim(key: String, packed: Int, into state: inout MultiplayerState) -> [RelayMessage] {
+        guard let game = state.activeMinigame else { return [] }
+        state.minigameClaims[key] = MinigameClaim(playerID: state.localPlayerID, packed: packed)
+        let event = MinigameEvent(gameID: game.gameID, playerID: state.localPlayerID, key: key, value: packed)
+        return [RelayMessage(message: .minigameEvent(event), reliable: true)]
+    }
+
+    // Live per-player object counts for the active round.
+    public static func minigameScores(_ state: MultiplayerState) -> [String: Int] {
+        guard let game = state.activeMinigame else { return [:] }
+        var scores = Dictionary(uniqueKeysWithValues: game.players.map { ($0, 0) })
+        for claim in state.minigameClaims.values where scores[claim.playerID] != nil {
+            scores[claim.playerID, default: 0] += 1
+        }
+        return scores
+    }
+
+    // Round host tallies the final scores and ends the round everywhere.
+    public static func endMinigame(into state: inout MultiplayerState) -> [RelayMessage] {
+        guard let game = state.activeMinigame else { return [] }
+        let end = MinigameEnd(gameID: game.gameID, kind: game.kind, scores: minigameScores(state))
+        applyMinigameEnd(end, into: &state)
+        return [RelayMessage(message: .minigameEnd(end), reliable: true)]
+    }
+
+    static func applyMinigameEnd(_ end: MinigameEnd, into state: inout MultiplayerState) {
+        guard state.activeMinigame?.gameID == end.gameID else { return }
+        state.activeMinigame = nil
+        state.minigameResults = end
+        state.minigameBall = nil
     }
 
     // MARK: Inbound
@@ -264,6 +433,16 @@ public enum MultiplayerReducer {
                   !state.pendingHearts.contains(where: { $0.id == heart.id }) else { return [] }
             state.pendingHearts.append(heart)
             return []
+        case .tradeOffer(let offer):
+            guard offer.target == state.localPlayerID,
+                  !state.pendingTradeOffers.contains(where: { $0.id == offer.id }) else { return [] }
+            state.pendingTradeOffers.append(offer)
+            return []
+        case .tradeResponse(let response):
+            guard response.target == state.localPlayerID,
+                  !state.pendingTradeResponses.contains(where: { $0.id == response.id }) else { return [] }
+            state.pendingTradeResponses.append(response)
+            return []
         case .danceEnd(let partner):
             // Partner is the requester's view of the pair; either id ending
             // the dance stops it locally.
@@ -276,9 +455,73 @@ public enum MultiplayerReducer {
             guard !state.pendingTaps.contains(where: { $0.id == tap.id }) else { return [] }
             state.pendingTaps.append(tap)
             return []
+        case .collisionGlow(let glow):
+            guard !state.pendingCollisionGlows.contains(where: { $0.id == glow.id }) else { return [] }
+            state.pendingCollisionGlows.append(glow)
+            return []
+        case .colorUnlock(let unlock):
+            guard !state.pendingColorUnlocks.contains(where: { $0.id == unlock.id }) else { return [] }
+            state.pendingColorUnlocks.append(unlock)
+            return []
+        case .activity(let action):
+            guard !state.pendingActivities.contains(where: { $0.id == action.id }) else { return [] }
+            state.pendingActivities.append(action)
+            return []
+        case .skybox(let skybox):
+            applySkybox(skybox, into: &state)
+            return []
         case .name:
             // Names live on the service (playerNames), not in pure state.
             // Intercepted by the transport layer before reaching the reducer.
+            return []
+        case .minigameInvite(let invite):
+            // Only the round host's own invite is honored, and never re-queued.
+            guard invite.hostID == playerID,
+                  invite.hostID != state.localPlayerID,
+                  state.activeMinigame == nil,
+                  !state.pendingMinigameInvites.contains(where: { $0.id == invite.id }) else { return [] }
+            state.pendingMinigameInvites.append(invite)
+            state.minigameAcceptances[invite.id, default: []].insert(invite.hostID)
+            return []
+        case .minigameInviteResponse(let gameID, let accepted):
+            if accepted {
+                state.minigameAcceptances[gameID, default: []].insert(playerID)
+            } else {
+                state.minigameAcceptances[gameID]?.remove(playerID)
+            }
+            return []
+        case .minigameStart(let start):
+            // Only the round host may start its own round.
+            guard start.hostID == playerID else { return [] }
+            applyMinigameStart(start, into: &state)
+            return []
+        case .minigameEvent(let event):
+            // Sender identity comes from the packet, never the payload.
+            guard let game = state.activeMinigame,
+                  game.gameID == event.gameID,
+                  game.players.contains(playerID) else { return [] }
+            state.minigameClaims[event.key] = MinigameClaim(playerID: playerID, packed: event.value)
+            return []
+        case .minigameEnd(let end):
+            // Normally sent by the round host; the session host may also end a
+            // round whose host disconnected, so any matching gameID is honored.
+            applyMinigameEnd(end, into: &state)
+            return []
+        case .minigameBall(let sync):
+            // Only the packet sender may drive the ball, and only for the live
+            // round. Last-write-wins by seq guards against reordered packets
+            // arriving right after an ownership handoff.
+            guard let game = state.activeMinigame,
+                  game.gameID == sync.gameID,
+                  game.players.contains(playerID),
+                  sync.ownerID == playerID else { return [] }
+            if let current = state.minigameBall,
+               current.ownerID == sync.ownerID,
+               current.seq > sync.seq { return [] }
+            state.minigameBall = sync
+            return []
+        case .ping, .pong:
+            // Handled at the transport layer (GameCenterService); no state.
             return []
         }
     }
@@ -297,11 +540,16 @@ public enum MultiplayerReducer {
             // A rejoining ghost reanimates in place: its avatar already sits
             // at the last known spot, so live poses smooth from there.
             state.ghostPeers.removeValue(forKey: playerID)
-            return broadcastColor(state) + hostRoster(state)
+            return broadcastColor(state) + hostRoster(state) + broadcastSkybox(state)
         } else {
             state.connectedPeers.remove(playerID)
             state.dancingPartners.remove(playerID)
             state.pendingDanceRequests.removeAll { $0 == playerID }
+            // Withdraw the departed player's round offers and acceptances.
+            state.pendingMinigameInvites.removeAll { $0.hostID == playerID }
+            for gameID in state.minigameAcceptances.keys {
+                state.minigameAcceptances[gameID]?.remove(playerID)
+            }
             if keepGhost, state.remotePoses[playerID] != nil {
                 state.ghostPeers[playerID] = date
             } else {
