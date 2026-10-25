@@ -22,6 +22,13 @@ public enum EmoteKind: Int, Codable, CaseIterable, Identifiable {
 
     public var id: Int { rawValue }
 
+    // An unknown raw value from a newer client must not throw, or the whole
+    // packet is dropped by NetMessage.decode. Fall back instead.
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(Int.self)
+        self = EmoteKind(rawValue: raw) ?? .wave
+    }
+
     public var displayName: String {
         switch self {
         case .wave: return "Wave"
@@ -82,19 +89,38 @@ public enum EmoteKind: Int, Codable, CaseIterable, Identifiable {
     }
 }
 
+// JSONEncoder throws on non-finite Floats, and `encoded()` swallows the throw,
+// so a single NaN anywhere in a payload silently stops that packet from ever
+// going out (a NaN hand anchor used to freeze a player for every peer). Every
+// Float that reaches the wire is sanitized at construction instead.
+@inline(__always) func wireFinite(_ v: Float) -> Float { v.isFinite ? v : 0 }
+
 public struct CodableTransform: Codable, Equatable {
     public var px: Float, py: Float, pz: Float
     public var qx: Float, qy: Float, qz: Float, qw: Float
 
     public init(_ m: simd_float4x4) {
         let p = m.columns.3
-        px = p.x; py = p.y; pz = p.z
-        let q = simd_quatf(m)
+        px = wireFinite(p.x); py = wireFinite(p.y); pz = wireFinite(p.z)
+        let q = CodableTransform.unit(simd_quatf(m))
         qx = q.imag.x; qy = q.imag.y; qz = q.imag.z; qw = q.real
     }
 
-    public var position: SIMD3<Float> { [px, py, pz] }
-    public var rotation: simd_quatf { simd_quatf(ix: qx, iy: qy, iz: qz, r: qw) }
+    // A scaled or degenerate anchor matrix yields a non-unit (or NaN)
+    // quaternion, which RealityKit applies as a scale/shear: the peer's head
+    // balloons or collapses. Normalize on the way out and on the way in.
+    static func unit(_ q: simd_quatf) -> simd_quatf {
+        let n = simd_length(q.vector)
+        guard n.isFinite, n > 1e-6 else { return simd_quatf(angle: 0, axis: [0, 1, 0]) }
+        return simd_quatf(vector: q.vector / n)
+    }
+
+    public var position: SIMD3<Float> {
+        [wireFinite(px), wireFinite(py), wireFinite(pz)]
+    }
+    public var rotation: simd_quatf {
+        CodableTransform.unit(simd_quatf(ix: qx, iy: qy, iz: qz, r: qw))
+    }
 }
 
 public struct PlayerPose: Codable, Equatable {
@@ -120,8 +146,9 @@ public struct PlayerPose: Codable, Equatable {
 
 extension CodableTransform {
     public init(position: SIMD3<Float>, rotation: simd_quatf) {
-        px = position.x; py = position.y; pz = position.z
-        qx = rotation.imag.x; qy = rotation.imag.y; qz = rotation.imag.z; qw = rotation.real
+        px = wireFinite(position.x); py = wireFinite(position.y); pz = wireFinite(position.z)
+        let q = CodableTransform.unit(rotation)
+        qx = q.imag.x; qy = q.imag.y; qz = q.imag.z; qw = q.real
     }
 }
 
@@ -146,8 +173,8 @@ public struct PaintPoint: Codable, Equatable {
     public var x: Float
     public var y: Float
     public init(x: Float, y: Float) {
-        self.x = x
-        self.y = y
+        self.x = wireFinite(x)
+        self.y = wireFinite(y)
     }
 }
 
@@ -301,9 +328,9 @@ public struct TapSparkle: Codable, Equatable, Identifiable {
 
     public init(id: String = UUID().uuidString, x: Float, y: Float, z: Float, senderID: String) {
         self.id = id
-        self.x = x
-        self.y = y
-        self.z = z
+        self.x = wireFinite(x)
+        self.y = wireFinite(y)
+        self.z = wireFinite(z)
         self.senderID = senderID
     }
 }
@@ -324,12 +351,12 @@ public struct CollisionGlow: Codable, Equatable, Identifiable {
 
     public init(id: String = UUID().uuidString, x: Float, y: Float, z: Float, r: Float, g: Float, b: Float, senderID: String) {
         self.id = id
-        self.x = x
-        self.y = y
-        self.z = z
-        self.r = r
-        self.g = g
-        self.b = b
+        self.x = wireFinite(x)
+        self.y = wireFinite(y)
+        self.z = wireFinite(z)
+        self.r = wireFinite(r)
+        self.g = wireFinite(g)
+        self.b = wireFinite(b)
         self.senderID = senderID
     }
 }
@@ -379,9 +406,9 @@ public struct ActivityAction: Codable, Equatable, Identifiable {
 
 public struct AvatarColor: Codable, Equatable {
     public init(r: Float, g: Float, b: Float, face: Int? = nil, hat: Int? = nil, material: Int? = nil, prop: Int? = nil, body: Int? = nil, height: Int? = nil, equippedItem: Int? = nil, hair: Int? = nil, hairR: Float? = nil, hairG: Float? = nil, hairB: Float? = nil, paint: [String: String]? = nil, flag: String? = nil, status: String? = nil, auraR: Float? = nil, auraG: Float? = nil, auraB: Float? = nil, nameEffect: Int? = nil) {
-        self.r = r
-        self.g = g
-        self.b = b
+        self.r = wireFinite(r)
+        self.g = wireFinite(g)
+        self.b = wireFinite(b)
         self.face = face
         self.hat = hat
         self.material = material
@@ -390,15 +417,15 @@ public struct AvatarColor: Codable, Equatable {
         self.height = height
         self.equippedItem = equippedItem
         self.hair = hair
-        self.hairR = hairR
-        self.hairG = hairG
-        self.hairB = hairB
+        self.hairR = hairR.map(wireFinite)
+        self.hairG = hairG.map(wireFinite)
+        self.hairB = hairB.map(wireFinite)
         self.paint = paint
         self.flag = flag
         self.status = status
-        self.auraR = auraR
-        self.auraG = auraG
-        self.auraB = auraB
+        self.auraR = auraR.map(wireFinite)
+        self.auraG = auraG.map(wireFinite)
+        self.auraB = auraB.map(wireFinite)
         self.nameEffect = nameEffect
     }
     public var r: Float
@@ -461,6 +488,13 @@ public enum MinigameKind: Int, Codable, CaseIterable, Identifiable {
 
     public var id: Int { rawValue }
 
+    // Unknown future game kinds decode as paintRush rather than throwing and
+    // taking the entire packet down with them.
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(Int.self)
+        self = MinigameKind(rawValue: raw) ?? .paintRush
+    }
+
     public var displayName: String {
         switch self {
         case .paintRush: return "Paint Rush"
@@ -512,8 +546,8 @@ public struct BallSync: Codable, Equatable {
         self.gameID = gameID
         self.ownerID = ownerID
         self.packed = packed
-        self.px = px; self.py = py; self.pz = pz
-        self.vx = vx; self.vy = vy; self.vz = vz
+        self.px = wireFinite(px); self.py = wireFinite(py); self.pz = wireFinite(pz)
+        self.vx = wireFinite(vx); self.vy = wireFinite(vy); self.vz = wireFinite(vz)
         self.seq = seq
     }
 }
@@ -677,8 +711,151 @@ public enum NetMessage: Codable, Equatable {
     case ping(origin: String, seq: UInt32)
     case pong(origin: String, seq: UInt32)
 
+    // Largest packet accepted off the wire. Everything the app legitimately
+    // sends fits well inside this; a bigger frame is a bug or an attack.
+    public static let maxPacketBytes = 512 * 1024
+
+    // Per-payload collection caps. A single small packet must never be able to
+    // make every peer allocate unbounded memory (a `color` carrying hundreds of
+    // compressed 256x256 canvases used to be a ~128MB fan-out per packet).
+    static let maxPaintStrokes = 256
+    static let maxPointsPerStroke = 4096
+    static let maxProps = 256
+    static let maxSigns = 64
+    static let maxRosterEntries = 64
+    static let maxPaintParts = 16
+    static let maxPaintBytesPerPart = 128 * 1024
+    static let maxPlayers = 64
+    static let maxTextLength = 512
+    // Ids, player ids, object keys and display names are all short by
+    // construction. Without a cap a peer can pin megabytes per packet in the
+    // pending queues (200 entries deep) while passing every other check.
+    static let maxIdentifierLength = 128
+    // Aggregate ceiling for a roster packet's paint payloads. Each entry is
+    // individually sane, but the sum used to blow past maxPacketBytes and the
+    // whole roster was silently dropped by every receiver.
+    static let maxRosterPaintBytes = 192 * 1024
+
     public static func decode(_ data: Data) -> NetMessage? {
-        try? JSONDecoder().decode(NetMessage.self, from: data)
+        guard !data.isEmpty, data.count <= maxPacketBytes else { return nil }
+        guard let message = try? JSONDecoder().decode(NetMessage.self, from: data),
+              message.isWithinLimits else { return nil }
+        return message
+    }
+
+    // Rejects structurally valid but abusive payloads.
+    var isWithinLimits: Bool {
+        switch self {
+        case .color(let color):
+            return NetMessage.colorIsSane(color)
+        case .signs(let signs):
+            return signs.count <= NetMessage.maxSigns
+                && signs.allSatisfy { $0.text.count <= NetMessage.maxTextLength }
+        case .roster(let roster):
+            return roster.count <= NetMessage.maxRosterEntries
+                && roster.keys.allSatisfy(NetMessage.idIsSane)
+                && roster.values.allSatisfy { NetMessage.colorIsSane($0) }
+                && NetMessage.rosterPaintBytes(roster) <= NetMessage.maxRosterPaintBytes
+        case .chat(let message):
+            return message.text.count <= NetMessage.maxTextLength
+                && NetMessage.idIsSane(message.id)
+                && NetMessage.idIsSane(message.senderID)
+                && NetMessage.idIsSane(message.senderName)
+        case .name(let name):
+            return name.count <= NetMessage.maxTextLength
+        case .minigameStart(let start):
+            return start.players.count <= NetMessage.maxPlayers
+                && NetMessage.idIsSane(start.gameID)
+                && NetMessage.idIsSane(start.hostID)
+                && start.players.allSatisfy(NetMessage.idIsSane)
+                && Set(start.players).count == start.players.count
+        case .minigameEnd(let end):
+            return end.scores.count <= NetMessage.maxPlayers
+                && NetMessage.idIsSane(end.gameID)
+                && end.scores.keys.allSatisfy(NetMessage.idIsSane)
+        case .minigameInvite(let invite):
+            return NetMessage.idIsSane(invite.id)
+                && NetMessage.idIsSane(invite.hostID)
+                && NetMessage.idIsSane(invite.hostName)
+        case .minigameInviteResponse(let gameID, _):
+            return NetMessage.idIsSane(gameID)
+        case .minigameEvent(let event):
+            return NetMessage.idIsSane(event.gameID)
+                && NetMessage.idIsSane(event.playerID)
+                && NetMessage.idIsSane(event.key)
+        case .minigameBall(let sync):
+            return NetMessage.idIsSane(sync.gameID) && NetMessage.idIsSane(sync.ownerID)
+        case .gift(let gift):
+            return NetMessage.idIsSane(gift.id)
+                && NetMessage.idIsSane(gift.senderID)
+                && NetMessage.idIsSane(gift.senderName)
+                && NetMessage.idIsSane(gift.target)
+        case .heart(let heart):
+            return NetMessage.idIsSane(heart.id)
+                && NetMessage.idIsSane(heart.senderID)
+                && NetMessage.idIsSane(heart.senderName)
+                && NetMessage.idIsSane(heart.target)
+        case .tradeOffer(let offer):
+            return NetMessage.idIsSane(offer.id)
+                && NetMessage.idIsSane(offer.senderID)
+                && NetMessage.idIsSane(offer.senderName)
+                && NetMessage.idIsSane(offer.target)
+        case .tradeResponse(let response):
+            return NetMessage.idIsSane(response.id)
+                && NetMessage.idIsSane(response.offerID)
+                && NetMessage.idIsSane(response.responderID)
+                && NetMessage.idIsSane(response.responderName)
+                && NetMessage.idIsSane(response.target)
+        case .colorUnlock(let unlock):
+            return NetMessage.idIsSane(unlock.id)
+                && NetMessage.idIsSane(unlock.senderID)
+                && NetMessage.idIsSane(unlock.senderName)
+                && NetMessage.idIsSane(unlock.colorName)
+        case .activity(let action):
+            return NetMessage.idIsSane(action.id) && NetMessage.idIsSane(action.playerID)
+        case .tap(let tap):
+            return NetMessage.idIsSane(tap.id) && NetMessage.idIsSane(tap.senderID)
+        case .collisionGlow(let glow):
+            return NetMessage.idIsSane(glow.id) && NetMessage.idIsSane(glow.senderID)
+        case .props(let props):
+            return props.count <= NetMessage.maxProps
+                && props.allSatisfy { $0.holder.map(NetMessage.idIsSane) ?? true }
+        case .paint(let strokes):
+            return strokes.count <= NetMessage.maxPaintStrokes
+                && strokes.allSatisfy {
+                    $0.points.count <= NetMessage.maxPointsPerStroke && NetMessage.idIsSane($0.id)
+                }
+        case .danceRequest(let target):
+            return NetMessage.idIsSane(target)
+        case .danceResponse(let target, _):
+            return NetMessage.idIsSane(target)
+        case .danceEnd(let partner):
+            return NetMessage.idIsSane(partner)
+        case .kick(let target):
+            return NetMessage.idIsSane(target)
+        case .ping(let origin, _), .pong(let origin, _):
+            return NetMessage.idIsSane(origin)
+        default:
+            return true
+        }
+    }
+
+    static func idIsSane(_ value: String) -> Bool {
+        value.utf8.count <= maxIdentifierLength
+    }
+
+    static func rosterPaintBytes(_ roster: [String: AvatarColor]) -> Int {
+        roster.values.reduce(0) { total, color in
+            total + (color.paint?.values.reduce(0) { $0 + $1.utf8.count } ?? 0)
+        }
+    }
+
+    static func colorIsSane(_ color: AvatarColor) -> Bool {
+        if let flag = color.flag, !idIsSane(flag) { return false }
+        if let status = color.status, !idIsSane(status) { return false }
+        guard let paint = color.paint else { return true }
+        return paint.count <= maxPaintParts
+            && paint.values.allSatisfy { $0.utf8.count <= maxPaintBytesPerPart }
     }
 
     public func encoded() -> Data? {

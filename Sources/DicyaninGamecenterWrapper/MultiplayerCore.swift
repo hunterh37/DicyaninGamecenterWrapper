@@ -27,6 +27,9 @@ public struct MultiplayerState: Equatable {
     public var pendingDanceRequests: [String] = []
     // Peers the local player is actively dancing with.
     public var dancingPartners: Set<String> = []
+    // Peers the local player has sent a dance request to and not yet heard back
+    // from. An unsolicited .danceResponse must never be able to force a pairing.
+    public var sentDanceRequests: Set<String> = []
     // Rolling lobby chat log, oldest first, capped at chatLogLimit entries.
     public var chatLog: [ChatMessage] = []
     // Latest known state of every networked prop, keyed by prop id.
@@ -91,6 +94,13 @@ public struct MultiplayerState: Equatable {
     public var isHost: Bool {
         connectedPeers.union([localPlayerID]).min() == localPlayerID
     }
+
+    // True when the given sender is the session host from the local player's
+    // point of view. The sender is folded into the election set so a roster
+    // arriving before that peer's connect callback is still trusted.
+    public func isHost(_ playerID: String) -> Bool {
+        connectedPeers.union([localPlayerID, playerID]).min() == playerID
+    }
 }
 
 public struct PendingEmote: Equatable {
@@ -124,6 +134,39 @@ public enum MultiplayerReducer {
     // Most recent paint strokes to retain on the shared board.
     public static let paintStrokeLimit = 500
 
+    // Cap for every drainable effect queue. The app drains these each frame, so
+    // anything beyond this is a peer flooding a client that is not rendering
+    // (window closed, immersive space shut). Without the cap the arrays grow
+    // without bound and the per-insert id dedupe scan turns quadratic.
+    public static let pendingQueueLimit = 200
+
+    // Keyed maps have no natural drain, so each needs its own ceiling or a peer
+    // minting fresh ids grows them for the life of the lobby.
+    public static let signLimit = 256
+    public static let propLimit = 512
+    public static let claimLimit = 4096
+    public static let acceptanceLimit = 64
+    public static let rosterEntryLimit = 64
+
+    static func appendCapped<T>(_ value: T, to queue: inout [T]) {
+        queue.append(value)
+        if queue.count > pendingQueueLimit {
+            queue.removeFirst(queue.count - pendingQueueLimit)
+        }
+    }
+
+    // Same cap, but hands back what fell off the front so callers can clean up
+    // any side tables keyed off the evicted entries.
+    @discardableResult
+    static func appendCappedReturningEvicted<T>(_ value: T, to queue: inout [T]) -> [T] {
+        queue.append(value)
+        guard queue.count > pendingQueueLimit else { return [] }
+        let overflow = queue.count - pendingQueueLimit
+        let evicted = Array(queue.prefix(overflow))
+        queue.removeFirst(overflow)
+        return evicted
+    }
+
     // MARK: Paint board
 
     public static func sendPaint(_ stroke: PaintStroke, into state: inout MultiplayerState) -> [RelayMessage] {
@@ -151,8 +194,25 @@ public enum MultiplayerReducer {
         return [RelayMessage(message: .signs([sign]), reliable: true)]
     }
 
-    static func applySign(_ sign: SignState, into state: inout MultiplayerState) {
+    // Timestamps come from each sender's own wall clock. A device whose clock
+    // runs fast (or a peer sending .distantFuture) would otherwise write a sign
+    // or skybox that nobody in the lobby can ever overwrite again, so incoming
+    // stamps are clamped to the local clock plus a small tolerance.
+    // Wide enough to keep normal cross-device clock jitter and packet reordering
+    // intact, tight enough that a bogus far-future stamp unblocks within a minute
+    // instead of pinning the value for the life of the lobby.
+    public static let clockSkewTolerance: TimeInterval = 60
+
+    static func clampToLocalClock(_ date: Date, now: Date = Date()) -> Date {
+        min(date, now.addingTimeInterval(clockSkewTolerance))
+    }
+
+    static func applySign(_ sign: SignState, into state: inout MultiplayerState, now: Date = Date()) {
+        var sign = sign
+        sign.editedAt = clampToLocalClock(sign.editedAt, now: now)
         if let current = state.signMessages[sign.id], current.editedAt > sign.editedAt { return }
+        // New ids past the ceiling are dropped; updates to known signs still land.
+        guard state.signMessages[sign.id] != nil || state.signMessages.count < signLimit else { return }
         state.signMessages[sign.id] = sign
     }
 
@@ -166,7 +226,7 @@ public enum MultiplayerReducer {
     static func appendChat(_ message: ChatMessage, into state: inout MultiplayerState) {
         guard !state.chatLog.contains(where: { $0.id == message.id }) else { return }
         state.chatLog.append(message)
-        state.pendingChats.append(PendingChat(playerID: message.senderID, text: message.text))
+        appendCapped(PendingChat(playerID: message.senderID, text: message.text), to: &state.pendingChats)
         if state.chatLog.count > chatLogLimit {
             state.chatLog.removeFirst(state.chatLog.count - chatLogLimit)
         }
@@ -182,14 +242,15 @@ public enum MultiplayerReducer {
     }
 
     public static func sendEmote(_ emote: EmoteKind, into state: inout MultiplayerState) -> [RelayMessage] {
-        state.pendingEmotes.append(PendingEmote(playerID: state.localPlayerID, emote: emote))
+        appendCapped(PendingEmote(playerID: state.localPlayerID, emote: emote), to: &state.pendingEmotes)
         return [RelayMessage(message: .emote(emote), reliable: true)]
     }
 
     // MARK: Dance
 
-    public static func requestDance(target: String) -> [RelayMessage] {
-        [RelayMessage(message: .danceRequest(target: target), reliable: true)]
+    public static func requestDance(target: String, into state: inout MultiplayerState) -> [RelayMessage] {
+        if state.sentDanceRequests.count < pendingQueueLimit { state.sentDanceRequests.insert(target) }
+        return [RelayMessage(message: .danceRequest(target: target), reliable: true)]
     }
 
     public static func respondDance(to requester: String, accepted: Bool, into state: inout MultiplayerState) -> [RelayMessage] {
@@ -200,6 +261,7 @@ public enum MultiplayerReducer {
 
     public static func endDance(with partner: String, into state: inout MultiplayerState) -> [RelayMessage] {
         state.dancingPartners.remove(partner)
+        state.sentDanceRequests.remove(partner)
         return [RelayMessage(message: .danceEnd(partner: partner), reliable: true)]
     }
 
@@ -259,7 +321,9 @@ public enum MultiplayerReducer {
         return [RelayMessage(message: .skybox(skybox), reliable: true)]
     }
 
-    static func applySkybox(_ skybox: SkyboxState, into state: inout MultiplayerState) {
+    static func applySkybox(_ skybox: SkyboxState, into state: inout MultiplayerState, now: Date = Date()) {
+        var skybox = skybox
+        skybox.changedAt = clampToLocalClock(skybox.changedAt, now: now)
         guard skybox.changedAt >= state.skybox.changedAt else { return }
         state.skybox = skybox
     }
@@ -278,6 +342,16 @@ public enum MultiplayerReducer {
         guard state.isHost else { return [] }
         var roster = state.remoteColors
         roster[state.localPlayerID] = state.localColor
+        // Each entry is individually legal, but a few painted avatars sum past
+        // the packet ceiling and every receiver drops the whole roster. Paint
+        // already arrives on each owner's own .color packet, so shed it rather
+        // than lose the colors.
+        if NetMessage.rosterPaintBytes(roster) > NetMessage.maxRosterPaintBytes {
+            for (id, var color) in roster {
+                color.paint = nil
+                roster[id] = color
+            }
+        }
         return [RelayMessage(message: .roster(roster), reliable: true)]
     }
 
@@ -298,8 +372,12 @@ public enum MultiplayerReducer {
 
     public static func respondMinigameInvite(gameID: String, accepted: Bool, into state: inout MultiplayerState) -> [RelayMessage] {
         state.pendingMinigameInvites.removeAll { $0.id == gameID }
+        let localID = state.localPlayerID
         if accepted {
-            state.minigameAcceptances[gameID, default: []].insert(state.localPlayerID)
+            state.minigameAcceptances[gameID, default: []].insert(localID)
+        } else {
+            // Declining after an earlier accept must retract that acceptance.
+            state.minigameAcceptances[gameID]?.remove(localID)
         }
         return [RelayMessage(message: .minigameInviteResponse(gameID: gameID, accepted: accepted), reliable: true)]
     }
@@ -339,7 +417,9 @@ public enum MultiplayerReducer {
     // Live per-player object counts for the active round.
     public static func minigameScores(_ state: MultiplayerState) -> [String: Int] {
         guard let game = state.activeMinigame else { return [:] }
-        var scores = Dictionary(uniqueKeysWithValues: game.players.map { ($0, 0) })
+        // A peer may send a roster with repeated ids; uniqueKeysWithValues traps
+        // on those, so collapse duplicates instead.
+        var scores = Dictionary(game.players.map { ($0, 0) }, uniquingKeysWith: { first, _ in first })
         for claim in state.minigameClaims.values where scores[claim.playerID] != nil {
             scores[claim.playerID, default: 0] += 1
         }
@@ -359,6 +439,10 @@ public enum MultiplayerReducer {
         state.activeMinigame = nil
         state.minigameResults = end
         state.minigameBall = nil
+        // Round scratch has no other drain: without this it survives until some
+        // later round happens to start.
+        state.minigameClaims = [:]
+        state.minigameAcceptances.removeValue(forKey: end.gameID)
     }
 
     // MARK: Inbound
@@ -378,7 +462,7 @@ public enum MultiplayerReducer {
             state.remoteColors[playerID] = color
             return hostRoster(state)
         case .emote(let emote):
-            state.pendingEmotes.append(PendingEmote(playerID: playerID, emote: emote))
+            appendCapped(PendingEmote(playerID: playerID, emote: emote), to: &state.pendingEmotes)
             return []
         case .chat(let message):
             appendChat(message, into: &state)
@@ -386,6 +470,9 @@ public enum MultiplayerReducer {
         case .props(let props):
             for prop in props {
                 let current = state.remoteProps[prop.id]
+                // New prop ids past the ceiling are dropped; a peer minting ids
+                // must not be able to grow the map without bound.
+                guard current != nil || state.remoteProps.count < Self.propLimit else { continue }
                 if prop.holder == playerID {
                     // A player may always claim and move a prop it says it holds.
                     state.remoteProps[prop.id] = prop
@@ -405,7 +492,13 @@ public enum MultiplayerReducer {
             for sign in signs { applySign(sign, into: &state) }
             return []
         case .roster(let roster):
-            for (id, color) in roster where id != state.localPlayerID {
+            // Only the session host publishes the authoritative roster. A
+            // non-host peer must never be able to repaint the whole lobby.
+            guard state.isHost(playerID) else { return [] }
+            // Only ids the transport actually knows about. A host cannot invent
+            // players, and stale roster entries never accumulate.
+            let known = state.connectedPeers.union(state.ghostPeers.keys).union([playerID])
+            for (id, color) in roster where id != state.localPlayerID && known.contains(id) {
                 state.remoteColors[id] = color
             }
             return []
@@ -418,30 +511,32 @@ public enum MultiplayerReducer {
             }
             return []
         case .danceResponse(let target, let accepted):
-            // Only the original requester acts on the answer.
-            if target == state.localPlayerID {
+            // Only the original requester acts on the answer, and only for a
+            // request it actually sent.
+            if target == state.localPlayerID, state.sentDanceRequests.contains(playerID) {
+                state.sentDanceRequests.remove(playerID)
                 if accepted { state.dancingPartners.insert(playerID) }
             }
             return []
         case .gift(let gift):
             guard gift.target == state.localPlayerID,
                   !state.pendingGifts.contains(where: { $0.id == gift.id }) else { return [] }
-            state.pendingGifts.append(gift)
+            appendCapped(gift, to: &state.pendingGifts)
             return []
         case .heart(let heart):
             guard heart.target == state.localPlayerID,
                   !state.pendingHearts.contains(where: { $0.id == heart.id }) else { return [] }
-            state.pendingHearts.append(heart)
+            appendCapped(heart, to: &state.pendingHearts)
             return []
         case .tradeOffer(let offer):
             guard offer.target == state.localPlayerID,
                   !state.pendingTradeOffers.contains(where: { $0.id == offer.id }) else { return [] }
-            state.pendingTradeOffers.append(offer)
+            appendCapped(offer, to: &state.pendingTradeOffers)
             return []
         case .tradeResponse(let response):
             guard response.target == state.localPlayerID,
                   !state.pendingTradeResponses.contains(where: { $0.id == response.id }) else { return [] }
-            state.pendingTradeResponses.append(response)
+            appendCapped(response, to: &state.pendingTradeResponses)
             return []
         case .danceEnd(let partner):
             // Partner is the requester's view of the pair; either id ending
@@ -450,22 +545,23 @@ public enum MultiplayerReducer {
                 state.dancingPartners.remove(playerID)
             }
             state.pendingDanceRequests.removeAll { $0 == playerID }
+            state.sentDanceRequests.remove(playerID)
             return []
         case .tap(let tap):
             guard !state.pendingTaps.contains(where: { $0.id == tap.id }) else { return [] }
-            state.pendingTaps.append(tap)
+            appendCapped(tap, to: &state.pendingTaps)
             return []
         case .collisionGlow(let glow):
             guard !state.pendingCollisionGlows.contains(where: { $0.id == glow.id }) else { return [] }
-            state.pendingCollisionGlows.append(glow)
+            appendCapped(glow, to: &state.pendingCollisionGlows)
             return []
         case .colorUnlock(let unlock):
             guard !state.pendingColorUnlocks.contains(where: { $0.id == unlock.id }) else { return [] }
-            state.pendingColorUnlocks.append(unlock)
+            appendCapped(unlock, to: &state.pendingColorUnlocks)
             return []
         case .activity(let action):
             guard !state.pendingActivities.contains(where: { $0.id == action.id }) else { return [] }
-            state.pendingActivities.append(action)
+            appendCapped(action, to: &state.pendingActivities)
             return []
         case .skybox(let skybox):
             applySkybox(skybox, into: &state)
@@ -480,19 +576,30 @@ public enum MultiplayerReducer {
                   invite.hostID != state.localPlayerID,
                   state.activeMinigame == nil,
                   !state.pendingMinigameInvites.contains(where: { $0.id == invite.id }) else { return [] }
-            state.pendingMinigameInvites.append(invite)
+            // Acceptance keys outlive the invite array, so an invite flood used
+            // to grow the map forever and whitelist every invented gameID.
+            guard state.minigameAcceptances.count < Self.acceptanceLimit
+                    || state.minigameAcceptances[invite.id] != nil else { return [] }
+            let evicted = appendCappedReturningEvicted(invite, to: &state.pendingMinigameInvites)
+            for stale in evicted { state.minigameAcceptances.removeValue(forKey: stale.id) }
             state.minigameAcceptances[invite.id, default: []].insert(invite.hostID)
             return []
         case .minigameInviteResponse(let gameID, let accepted):
+            // Only rounds this peer already knows about are tracked, otherwise a
+            // peer spamming responses for invented gameIDs grows the map forever.
+            guard state.minigameAcceptances[gameID] != nil else { return [] }
             if accepted {
-                state.minigameAcceptances[gameID, default: []].insert(playerID)
+                state.minigameAcceptances[gameID]?.insert(playerID)
             } else {
                 state.minigameAcceptances[gameID]?.remove(playerID)
             }
             return []
         case .minigameStart(let start):
-            // Only the round host may start its own round.
-            guard start.hostID == playerID else { return [] }
+            // Only the round host may start its own round, and never on top of
+            // a live one: a third peer must not be able to wipe the round the
+            // local player is playing.
+            guard start.hostID == playerID,
+                  state.activeMinigame == nil || state.activeMinigame?.gameID == start.gameID else { return [] }
             applyMinigameStart(start, into: &state)
             return []
         case .minigameEvent(let event):
@@ -500,11 +607,18 @@ public enum MultiplayerReducer {
             guard let game = state.activeMinigame,
                   game.gameID == event.gameID,
                   game.players.contains(playerID) else { return [] }
+            guard state.minigameClaims[event.key] != nil
+                    || state.minigameClaims.count < Self.claimLimit else { return [] }
             state.minigameClaims[event.key] = MinigameClaim(playerID: playerID, packed: event.value)
             return []
         case .minigameEnd(let end):
-            // Normally sent by the round host; the session host may also end a
-            // round whose host disconnected, so any matching gameID is honored.
+            // Sent by the round host, or by the session host when the round host
+            // disconnected. Any other participant ending the round is a spoof.
+            guard state.activeMinigame?.gameID == end.gameID else { return [] }
+            let roundHost = state.activeMinigame?.hostID
+            // The session host is a fallback only for a round whose host left.
+            let roundHostGone = roundHost.map { !state.connectedPeers.contains($0) && $0 != state.localPlayerID } ?? true
+            guard playerID == roundHost || (state.isHost(playerID) && roundHostGone) else { return [] }
             applyMinigameEnd(end, into: &state)
             return []
         case .minigameBall(let sync):
@@ -515,6 +629,11 @@ public enum MultiplayerReducer {
                   game.gameID == sync.gameID,
                   game.players.contains(playerID),
                   sync.ownerID == playerID else { return [] }
+            // Seq is per-owner (each sender counts from 1 when it seizes the
+            // ball), so it only orders packets within one ownership run. A
+            // handoff is always accepted: peers legitimately hold divergent ball
+            // state (a neutral kickoff carries no authority and is dropped), so a
+            // room-global counter would let stale local state veto the new owner.
             if let current = state.minigameBall,
                current.ownerID == sync.ownerID,
                current.seq > sync.seq { return [] }
@@ -544,9 +663,16 @@ public enum MultiplayerReducer {
         } else {
             state.connectedPeers.remove(playerID)
             state.dancingPartners.remove(playerID)
+            state.sentDanceRequests.remove(playerID)
             state.pendingDanceRequests.removeAll { $0 == playerID }
             // Withdraw the departed player's round offers and acceptances.
+            let live = Set(state.pendingMinigameInvites.filter { $0.hostID == playerID }.map(\.id))
             state.pendingMinigameInvites.removeAll { $0.hostID == playerID }
+            // Drop the acceptance bookkeeping for the withdrawn offers outright,
+            // otherwise the keys linger for the life of the lobby.
+            for gameID in live where state.activeMinigame?.gameID != gameID {
+                state.minigameAcceptances.removeValue(forKey: gameID)
+            }
             for gameID in state.minigameAcceptances.keys {
                 state.minigameAcceptances[gameID]?.remove(playerID)
             }

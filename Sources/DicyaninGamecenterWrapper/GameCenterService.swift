@@ -169,6 +169,26 @@ public final class GameCenterService: NSObject, ObservableObject {
     // Lobby size cap. Game Center peer-to-peer real-time matches allow at
     // most this many players; requests are clamped to it.
     public static let lobbyCapacity = 16
+
+    // The real ceiling GameKit will grant for a peer-to-peer match. Publishing
+    // an unclamped lobbyCapacity used to advertise room in a lobby GameKit
+    // could never grow, so joiners matchmade into a full group and hung.
+    public nonisolated static var peerToPeerCapacity: Int {
+        min(lobbyCapacity, GKMatchRequest.maxPlayersAllowedForMatch(of: .peerToPeer))
+    }
+
+    // Pure lobby pick used by autoJoin: fullest room that still has space by the
+    // host's own capacity, never our own room, never one already in progress,
+    // and never the room we are already sitting in.
+    public nonisolated static func bestLobby(
+        from lobbies: [GlobalLobby],
+        localID: String,
+        currentGroup: Int? = nil
+    ) -> GlobalLobby? {
+        lobbies
+            .filter { $0.hostID != localID && $0.hasRoom && !$0.inProgress && $0.playerGroup != currentGroup }
+            .max { $0.playerCount < $1.playerCount }
+    }
     // How long a departed player's avatar stays frozen in place for peers.
     public static let ghostLifetime: TimeInterval = 300
     private static let lastPoseKey = "multiplayer.lastLocalPose"
@@ -323,10 +343,18 @@ public final class GameCenterService: NSObject, ObservableObject {
                 self.log.info("Auth", "isAuthenticated=\(self.isAuthenticated) player=\(GKLocalPlayer.local.gamePlayerID)")
                 if self.isAuthenticated {
                     if self.state.localPlayerID != GKLocalPlayer.local.gamePlayerID {
+                        // The local id changed under a live match: every peer
+                        // would recompute host election against an id that is not
+                        // in anyone's roster. Tear the session down first.
+                        if self.match != nil || self.isSoloSession { self.leaveMatch() }
                         let keepColor = self.state.localColor
                         self.state = MultiplayerState(localPlayerID: GKLocalPlayer.local.gamePlayerID)
                         self.state.localColor = keepColor
+                        self.playerNames.removeAll()
                     }
+                    // authenticateHandler fires again on re-auth and account
+                    // switches; registering twice duplicates invite callbacks.
+                    GKLocalPlayer.local.unregisterAllListeners()
                     GKLocalPlayer.local.register(self)
                     self.lobbyService.subscribe()
                     self.lobbyService.refresh()
@@ -353,7 +381,7 @@ public final class GameCenterService: NSObject, ObservableObject {
         }
         // Globally discoverable rooms from the CloudKit public database.
         list += lobbyService.lobbies
-            .filter { $0.hostID != localPlayerID }
+            .filter { $0.hostID != localPlayerID && $0.playerGroup != currentLobbyGroup }
             .map { lobby in
                 LobbyListing(
                     id: lobby.id,
@@ -371,6 +399,14 @@ public final class GameCenterService: NSObject, ObservableObject {
     // Global quick-match queue, always joinable. Surfaced as its own primary
     // action in the UI instead of a row in the lobby list.
     public func quickPlay(maxPlayers: Int = lobbyCapacity) {
+        // startMatchmaking bails on a missing auth. Checking first keeps this
+        // from flipping isSoloSession (and opening the arena) on a session that
+        // no peer can ever discover.
+        guard isAuthenticated else {
+            log.error("Matchmaking", "Quick play blocked: not authenticated with Game Center")
+            authError = "Sign in to Game Center to find a match."
+            return
+        }
         log.info("Join", "Quick play: entering solo now, filling group 1 in background")
         isAutoMatchmaking = false
         quickPlayTimer?.invalidate()
@@ -383,6 +419,22 @@ public final class GameCenterService: NSObject, ObservableObject {
         playerNames.removeAll()
         isSoloSession = true
         startMatchmaking(request: standardRequest(maxPlayers: maxPlayers, playerGroup: 1))
+        armQuickPlayFallback(maxPlayers: maxPlayers)
+    }
+
+    // The fallback that makes a lonely player discoverable. Without it a solo
+    // quick-play session publishes no lobby record at all, so nobody can ever
+    // find the player and matchmaking waits forever.
+    private func armQuickPlayFallback(maxPlayers: Int) {
+        quickPlayTimer?.invalidate()
+        // .common mode, or the timer stops firing while the main run loop is
+        // in a tracking mode (scroll, drag, modal) and a missed heartbeat ages
+        // a live room out of every client's list.
+        let timer = Timer(timeInterval: Self.quickPlayTimeout, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.quickPlayTimedOut(maxPlayers: maxPlayers) }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        quickPlayTimer = timer
     }
 
     // Quick play found no one in time: stop searching the global queue and
@@ -390,7 +442,7 @@ public final class GameCenterService: NSObject, ObservableObject {
     // others can still join and upgrade it into a real match.
     private func quickPlayTimedOut(maxPlayers: Int) {
         quickPlayTimer = nil
-        guard match == nil, isMatchmaking, !isSoloSession else { return }
+        guard match == nil, isMatchmaking, hostedLobbyGroup == nil else { return }
         log.info("Matchmaking", "Quick play timed out after \(Int(Self.quickPlayTimeout))s, creating own lobby")
         matchmakingGeneration += 1
         GKMatchmaker.shared().cancel()
@@ -409,15 +461,20 @@ public final class GameCenterService: NSObject, ObservableObject {
         isAutoMatchmaking = true
         lobbyService.fetchOpenLobbies { [weak self] lobbies in
             guard let self, self.match == nil, self.isAutoMatchmaking, !self.isMockSession else { return }
-            let best = lobbies
-                .filter { $0.hostID != self.localPlayerID && $0.playerCount < maxPlayers }
-                .max { $0.playerCount < $1.playerCount }
+            let best = Self.bestLobby(
+                from: lobbies ?? [],
+                localID: self.localPlayerID,
+                currentGroup: self.currentLobbyGroup
+            )
             if let best {
                 self.log.info("Join", "Auto-joining lobby \(best.name) group=\(best.playerGroup) count=\(best.playerCount)")
-                self.startMatchmaking(request: self.standardRequest(maxPlayers: maxPlayers, playerGroup: best.playerGroup))
+                // The host's own ceiling, not this device's default: a request
+                // with a different maxPlayers never merges into the host's match.
+                self.startMatchmaking(request: self.standardRequest(maxPlayers: best.maxPlayers, playerGroup: best.playerGroup))
             } else {
                 self.log.info("Join", "Auto-join: no open lobby, entering quick-play queue")
                 self.startMatchmaking(request: self.standardRequest(maxPlayers: maxPlayers, playerGroup: 1))
+                self.armQuickPlayFallback(maxPlayers: maxPlayers)
             }
         }
     }
@@ -427,18 +484,23 @@ public final class GameCenterService: NSObject, ObservableObject {
     // When `solo` is true the player enters the arena immediately, alone, while
     // the lobby stays published and matchmaking keeps running in the background
     // so peers can join and upgrade the session into a real GKMatch.
-    public func createLobby(maxPlayers: Int = lobbyCapacity, solo: Bool = false) {
+    // `isPrivate` keeps the room out of the public CloudKit directory: only
+    // someone holding the invite code can reach it.
+    public func createLobby(maxPlayers: Int = lobbyCapacity, solo: Bool = false, isPrivate: Bool = false) {
         guard isAuthenticated else {
             log.error("Lobby", "Create blocked: not authenticated with Game Center")
             authError = "Sign in to Game Center to create a lobby."
             return
         }
         isAutoMatchmaking = false
-        let group = Int.random(in: 2...1_000_000)
+        let maxPlayers = min(maxPlayers, Self.peerToPeerCapacity)
+        let group = Int.random(in: 2...Int(Int32.max))
         hostedLobbyGroup = group
         let name = GKLocalPlayer.local.displayName.isEmpty ? "Open Arena" : "\(GKLocalPlayer.local.displayName)'s Arena"
         log.info("Lobby", "Creating lobby name=\(name) group=\(group) maxPlayers=\(maxPlayers) solo=\(solo)")
-        lobbyService.publish(name: name, hostID: localPlayerID, playerGroup: group, maxPlayers: maxPlayers)
+        if !isPrivate {
+            lobbyService.publish(name: name, hostID: localPlayerID, playerGroup: group, maxPlayers: maxPlayers)
+        }
         if solo {
             let keepColor = state.localColor
             state = MultiplayerState(localPlayerID: localPlayerID)
@@ -464,11 +526,28 @@ public final class GameCenterService: NSObject, ObservableObject {
         switch lobby.source {
         case .invite(let invite):
             log.info("Join", "Accepting invite from \(invite.sender.displayName)")
+            // GKMatchmaker allows one outstanding request; without this the
+            // match(for:) fails as invalid and the invite is consumed for good.
+            if isMatchmaking {
+                log.warn("Matchmaking", "Cancelling in-flight matchmaking before accepting invite")
+                GKMatchmaker.shared().cancel()
+            }
             isMatchmaking = true
+            matchmakingGeneration += 1
+            let generation = matchmakingGeneration
             GKMatchmaker.shared().match(for: invite) { [weak self] match, error in
                 Task { @MainActor in
-                    self?.invites.removeValue(forKey: invite.sender.gamePlayerID)
-                    self?.matchmakingFinished(match: match, error: error)
+                    guard let self else { return }
+                    self.invites.removeValue(forKey: invite.sender.gamePlayerID)
+                    // Same superseded-request guard the findMatch path uses, or
+                    // an in-flight search can replace the invite match (and vice
+                    // versa) and leak a still-live GKMatch into the session.
+                    guard generation == self.matchmakingGeneration else {
+                        self.log.debug("Matchmaking", "Ignoring superseded invite completion")
+                        match?.disconnect()
+                        return
+                    }
+                    self.matchmakingFinished(match: match, error: error)
                 }
             }
         case .quickMatch:
@@ -476,14 +555,15 @@ public final class GameCenterService: NSObject, ObservableObject {
             startMatchmaking(request: standardRequest(maxPlayers: Self.lobbyCapacity, playerGroup: 1))
         case .global(let global):
             log.info("Join", "Joining global lobby \(global.name) group=\(global.playerGroup)")
-            startMatchmaking(request: standardRequest(maxPlayers: Self.lobbyCapacity, playerGroup: global.playerGroup))
+            startMatchmaking(request: standardRequest(maxPlayers: global.maxPlayers, playerGroup: global.playerGroup))
         }
     }
 
     /// Joins the lobby identified by a Game Center `playerGroup`, the value
     /// carried in an invite deeplink. Matchmaking drops the player into the
     /// same real-time match everyone else who shares that link lands in.
-    public func joinLobby(group: Int) {
+    /// `maxPlayers` must equal the host's request or matchmaking never merges the two.
+    public func joinLobby(group: Int, maxPlayers: Int = lobbyCapacity) {
         guard group > 0 else {
             log.warn("Join", "Ignoring deeplink join with invalid group \(group)")
             return
@@ -495,13 +575,24 @@ public final class GameCenterService: NSObject, ObservableObject {
             pendingDeepLinkGroup = group
             return
         }
-        guard match == nil, !isMatchmaking else {
-            log.info("Join", "Deeplink join ignored: already in a session (group=\(group))")
+        guard match == nil else {
+            log.info("Join", "Deeplink join ignored: already in a match (group=\(group))")
             return
+        }
+        // An auto-join racing the link must not win: the player asked for this
+        // specific room, so supersede the background search instead of yielding.
+        if isMatchmaking {
+            log.info("Join", "Superseding in-flight matchmaking for deeplink group=\(group)")
+            matchmakingGeneration += 1
+            quickPlayTimer?.invalidate()
+            quickPlayTimer = nil
+            GKMatchmaker.shared().cancel()
+            isMatchmaking = false
+            isAutoMatchmaking = false
         }
         log.info("Join", "Deeplink joining lobby group=\(group)")
         isAutoMatchmaking = false
-        startMatchmaking(request: standardRequest(maxPlayers: Self.lobbyCapacity, playerGroup: group))
+        startMatchmaking(request: standardRequest(maxPlayers: maxPlayers, playerGroup: group))
     }
 
     private func standardRequest(maxPlayers: Int, playerGroup: Int) -> GKMatchRequest {
@@ -562,6 +653,16 @@ public final class GameCenterService: NSObject, ObservableObject {
         if let error {
             isMatchmaking = false
             log.error("Matchmaking", "Failed: \(error.localizedDescription)")
+            // Do not leave a phantom lobby advertising a group nobody is
+            // searching, and do not strand the player in a dead solo session.
+            if match == nil {
+                isSoloSession = false
+                hostedLobbyGroup = nil
+                // Both lobby filters skip currentLobbyGroup, so leaving it set
+                // hides the room the player just failed to join, with no retry.
+                currentLobbyGroup = nil
+                lobbyService.closeHostedLobby()
+            }
             // Auto-join failures stay quiet; the player never asked for it.
             if !isAutoMatchmaking {
                 authError = error.localizedDescription
@@ -572,6 +673,7 @@ public final class GameCenterService: NSObject, ObservableObject {
         guard let match else {
             isMatchmaking = false
             isAutoMatchmaking = false
+            if !isSoloSession { currentLobbyGroup = nil }
             log.warn("Matchmaking", "Completed with no match (likely cancelled)")
             return
         }
@@ -579,9 +681,28 @@ public final class GameCenterService: NSObject, ObservableObject {
         quickPlayTimer?.invalidate()
         quickPlayTimer = nil
         isSoloSession = false
+        // Retire a match this one supersedes, otherwise it keeps its delegate
+        // and keeps injecting traffic from the abandoned session.
+        if let previous = self.match, previous !== match {
+            previous.delegate = nil
+            previous.disconnect()
+        }
         match.delegate = self
         self.match = match
         startPingLoop()
+        // Peers carried over from a superseded session would otherwise sit in
+        // connectedPeers forever, and host election (lowest id among peers plus
+        // self) would resolve to a phantom nobody can hear.
+        let incoming = Set(match.players.map(\.gamePlayerID))
+        for stale in state.connectedPeers.subtracting(incoming) {
+            log.debug("Match", "Dropping stale peer \(stale) from a superseded session")
+            _ = MultiplayerReducer.peerChanged(stale, connected: false, into: &state)
+            playerNames.removeValue(forKey: stale)
+        }
+        for ghost in Array(state.ghostPeers.keys) where !incoming.contains(ghost) {
+            _ = MultiplayerReducer.peerChanged(ghost, connected: false, into: &state)
+            playerNames.removeValue(forKey: ghost)
+        }
         for player in match.players {
             state.connectedPeers.insert(player.gamePlayerID)
             playerNames[player.gamePlayerID] = player.displayName
@@ -589,6 +710,9 @@ public final class GameCenterService: NSObject, ObservableObject {
         }
         log.info("Match", "isHost=\(isHost)")
         finishMatchmakingIfReady()
+        // Peers that arrive with the initial match never raise a connection
+        // event, so without this the published room is stuck advertising 1.
+        syncHostedPlayerCount()
         send(MultiplayerReducer.broadcastColor(state))
         broadcastName()
         // Rejoin continuity: reliably announce the spot this player last stood
@@ -598,6 +722,7 @@ public final class GameCenterService: NSObject, ObservableObject {
             send([MultiplayerReducer.makePose(pose, reliable: true)])
         }
         startGhostPruning()
+        onRosterChanged?()
     }
 
     // MARK: - Ghosts
@@ -605,9 +730,14 @@ public final class GameCenterService: NSObject, ObservableObject {
     // Departed players linger as frozen avatars, then age out.
     private func startGhostPruning() {
         ghostTimer?.invalidate()
-        ghostTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+        // .common mode, or the timer stops firing while the main run loop is
+        // in a tracking mode (scroll, drag, modal) and a missed heartbeat ages
+        // a live room out of every client's list.
+        let timer = Timer(timeInterval: 15, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.pruneGhosts() }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        ghostTimer = timer
     }
 
     private func stopGhostPruning() {
@@ -629,10 +759,17 @@ public final class GameCenterService: NSObject, ObservableObject {
     private func finishMatchmakingIfReady() {
         guard let match else { return }
         if match.expectedPlayerCount == 0 {
-            GKMatchmaker.shared().finishMatchmaking(for: match)
+            // finishMatchmaking closes the match to new players permanently.
+            // minPlayers is 2, so calling it here capped every room at two and
+            // sent everyone after that into a second, disjoint match in the
+            // same group. Only seal the room once it is actually full.
+            if match.players.count + 1 >= Self.peerToPeerCapacity {
+                GKMatchmaker.shared().finishMatchmaking(for: match)
+                log.info("Matchmaking", "Lobby full, matchmaking finished")
+            }
             isMatchmaking = false
             isAutoMatchmaking = false
-            log.info("Matchmaking", "All expected players connected, matchmaking finished")
+            log.info("Matchmaking", "All expected players connected, room stays open for late joiners")
         } else {
             isMatchmaking = true
             log.info("Matchmaking", "Waiting for \(match.expectedPlayerCount) more player(s) to connect")
@@ -656,6 +793,12 @@ public final class GameCenterService: NSObject, ObservableObject {
     public func leaveMatch() {
         log.info("Match", "Leaving match")
         stopGhostPruning()
+        // A mock session's 15 Hz driver would otherwise keep writing poses into
+        // the state this call is about to reset, keeping inSession true forever.
+        if isMockSession {
+            mockDriver.stop()
+            isMockSession = false
+        }
         persistLastPose()
         // A solo player has no GKMatch yet but is still searching in the
         // background; stop that search so leaving actually returns to the menu.
@@ -677,10 +820,15 @@ public final class GameCenterService: NSObject, ObservableObject {
         playerNames.removeAll()
         hostedLobbyGroup = nil
         currentLobbyGroup = nil
+        // A link deferred during this session must not fire on the next auth,
+        // and a consumed invite must not linger as a dead lobby row.
+        pendingDeepLinkGroup = nil
+        invites.removeAll()
         lobbyService.closeHostedLobby()
         // Back on the home view the player immediately sees a fresh list of
         // tables to hop into next.
         lobbyService.refresh()
+        onRosterChanged?()
     }
 
     // Saves the last broadcast pose so the avatar reappears at the same spot
@@ -725,6 +873,7 @@ public final class GameCenterService: NSObject, ObservableObject {
         mockDriver.stop()
         isMockSession = false
         stopPingLoop()
+        stopGhostPruning()
         let keepColor = state.localColor
         state = MultiplayerState(localPlayerID: localPlayerID)
         state.localColor = keepColor
@@ -762,8 +911,47 @@ public final class GameCenterService: NSObject, ObservableObject {
     }
 
     private func syncHostedPlayerCount() {
-        guard hostedLobbyGroup != nil, let match else { return }
-        lobbyService.updatePlayerCount(match.players.count + 1)
+        // A solo host has no GKMatch yet, and its record must still count itself
+        // rather than stay pinned at the published default.
+        guard hostedLobbyGroup != nil else { return }
+        lobbyService.updatePlayerCount(state.connectedPeers.count + 1)
+    }
+
+    // MARK: - Raw app channel
+
+    /// Receives frames sent with `sendRaw`, with the sender's gamePlayerID.
+    /// Apps with their own wire protocol use this instead of the avatar messages.
+    public var rawHandler: ((Data, String) -> Void)?
+    /// Fires when the roster changes: match found, peer joined or left, session ended.
+    public var onRosterChanged: (() -> Void)?
+
+    /// Share code of the lobby the player is hosting or sitting in.
+    public var inviteCode: String? { currentLobbyGroup.flatMap { InviteCode.encode(group: $0) } }
+    public var connectedPeerIDs: [String] { state.connectedPeers.sorted() }
+
+    /// Sends an app frame to every peer, or only to `playerIDs`.
+    public func sendRaw(_ data: Data, reliable: Bool = true, to playerIDs: [String]? = nil) {
+        guard let match else { return }
+        let frame = Data([InviteCode.rawFrameMarker]) + data
+        let mode: GKMatch.SendDataMode = reliable ? .reliable : .unreliable
+        if let playerIDs {
+            let targets = match.players.filter { playerIDs.contains($0.gamePlayerID) }
+            guard !targets.isEmpty else { return }
+            try? match.send(frame, to: targets, dataMode: mode)
+        } else {
+            try? match.sendData(toAllPlayers: frame, with: mode)
+        }
+    }
+
+    /// Joins the lobby behind a typed or linked invite code. False for a malformed code.
+    @discardableResult
+    public func joinLobby(code: String, maxPlayers: Int = lobbyCapacity) -> Bool {
+        guard let group = InviteCode.decode(code) else {
+            log.warn("Join", "Rejected malformed invite code")
+            return false
+        }
+        joinLobby(group: group, maxPlayers: maxPlayers)
+        return true
     }
 
     // MARK: - Sending
@@ -965,7 +1153,7 @@ public final class GameCenterService: NSObject, ObservableObject {
             state.dancingPartners.insert(playerID)
             return
         }
-        send(MultiplayerReducer.requestDance(target: playerID))
+        send(MultiplayerReducer.requestDance(target: playerID, into: &state))
     }
 
     public func acceptDance(from playerID: String) {
@@ -1150,8 +1338,14 @@ public final class GameCenterService: NSObject, ObservableObject {
     // MARK: - Receiving
 
     fileprivate func receive(_ data: Data, fromPlayerID playerID: String) {
+        if data.first == InviteCode.rawFrameMarker {
+            rawHandler?(data.dropFirst(), playerID)
+            return
+        }
+        // Decode once: this runs at pose rate times peer count on the main actor.
+        guard let message = NetMessage.decode(data) else { return }
         // Honor a kick only from the current host, and only if it targets us.
-        if case .kick(let target)? = NetMessage.decode(data) {
+        if case .kick(let target) = message {
             guard playerID == hostPlayerID else { return }
             if target == localPlayerID {
                 log.warn("Match", "Kicked by host, leaving match")
@@ -1160,27 +1354,34 @@ public final class GameCenterService: NSObject, ObservableObject {
             return
         }
         // Names live on the service, not in pure reducer state.
-        if case .name(let name)? = NetMessage.decode(data) {
+        if case .name(let name) = message {
             let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty { playerNames[playerID] = trimmed }
             return
         }
-        switch NetMessage.decode(data) {
-        case .ping(let origin, let seq)?:
-            // Echo straight back, unreliable. Cheap enough to send to all;
-            // peers that did not originate the seq ignore the pong.
+        switch message {
+        case .ping(let origin, let seq):
+            // Echo straight back to the origin only, unreliable. Broadcasting the
+            // echo made probe traffic O(N^2) on a mesh already carrying poses.
             if let match, let reply = NetMessage.pong(origin: origin, seq: seq).encoded() {
-                try? match.sendData(toAllPlayers: reply, with: .unreliable)
+                if let sender = match.players.first(where: { $0.gamePlayerID == playerID }) {
+                    try? match.send(reply, to: [sender], dataMode: .unreliable)
+                } else {
+                    try? match.sendData(toAllPlayers: reply, with: .unreliable)
+                }
             }
             return
-        case .pong(let origin, let seq)?:
-            guard origin == localPlayerID, let sentAt = pingSent.removeValue(forKey: seq) else { return }
+        case .pong(let origin, let seq):
+            // Peek, never consume: the ping is broadcast, so every peer answers
+            // the same seq. Removing on the first pong left every other peer
+            // without a latency reading. The cutoff sweep in pingTick expires it.
+            guard origin == localPlayerID, let sentAt = pingSent[seq] else { return }
             recordPing(Date().timeIntervalSince(sentAt) * 1000, for: playerID)
             return
         default:
             break
         }
-        send(MultiplayerReducer.receive(data, from: playerID, into: &state))
+        send(MultiplayerReducer.apply(message, from: playerID, into: &state))
     }
 
     // MARK: - Connectivity (ping)
@@ -1189,9 +1390,14 @@ public final class GameCenterService: NSObject, ObservableObject {
 
     private func startPingLoop() {
         pingTimer?.invalidate()
-        pingTimer = Timer.scheduledTimer(withTimeInterval: Self.pingInterval, repeats: true) { [weak self] _ in
+        // .common mode, or the timer stops firing while the main run loop is
+        // in a tracking mode (scroll, drag, modal) and a missed heartbeat ages
+        // a live room out of every client's list.
+        let timer = Timer(timeInterval: Self.pingInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.pingTick() }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        pingTimer = timer
         pingTick()
     }
 
@@ -1250,7 +1456,26 @@ public final class GameCenterService: NSObject, ObservableObject {
             finishMatchmakingIfReady()
             broadcastName()
         }
+        adoptHostedLobbyIfPromoted()
         syncHostedPlayerCount()
+        onRosterChanged?()
+    }
+
+    // When the creator leaves, the next host takes over the published record so
+    // the still-populated room does not vanish from every client's lobby list
+    // (and its player count keeps updating).
+    private func adoptHostedLobbyIfPromoted() {
+        guard isHost, hostedLobbyGroup == nil, let group = currentLobbyGroup, match != nil else { return }
+        hostedLobbyGroup = group
+        let name = GKLocalPlayer.local.displayName.isEmpty ? "Open Arena" : "\(GKLocalPlayer.local.displayName)'s Arena"
+        log.info("Lobby", "Promoted to host, republishing lobby group=\(group)")
+        lobbyService.publish(
+            name: name,
+            hostID: localPlayerID,
+            playerGroup: group,
+            maxPlayers: Self.peerToPeerCapacity,
+            playerCount: state.connectedPeers.count + 1
+        )
     }
 
     fileprivate func matchFailed(_ error: Error?) {
